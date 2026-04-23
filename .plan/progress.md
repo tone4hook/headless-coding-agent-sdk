@@ -66,3 +66,12 @@ Append-only timestamped events. New entries at the bottom.
 - Verified: typecheck 0, vitest 62/62 across 6 test files.
 
 ## 2026-04-23 15:58 — Phase 7 verified & complete
+
+## 2026-04-23 16:00 — Phase 8 started: Gemini adapter flags + skeleton
+
+- Wrote src/adapters/gemini/flags.ts: buildGeminiArgv emits the verified gemini 0.38.2 argv. Rejects Claude-only fields (permissionMode, settingSources, addDirs, forkSession, systemPrompt, appendSystemPrompt, agents, maxBudgetUsd). Strict outputSchema → FeatureNotSupportedError (gemini has no --json-schema); non-strict pass-through for Phase 10 prompt-injection.
+- Wrote src/adapters/gemini/index.ts: GeminiCoder/GeminiThread skeletons. fork() throws FeatureNotSupportedError unconditionally since gemini has no --fork-session equivalent.
+- Wrote test/gemini-flags.test.ts — 11 tests covering every flag mapping + both rejection paths.
+- Verified: typecheck 0, vitest 11/11 gemini-flags.test.ts, full suite 73/73.
+
+## 2026-04-23 16:03 — Phase 8 verified & complete
