@@ -74,7 +74,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## - [ ] Phase 2 — Core types and errors
+## - [x] Phase 2 — Core types and errors
 
 - Files: `src/types.ts`, `src/errors.ts`, `test/types.test.ts`
 - Steps:
@@ -269,3 +269,5 @@ headless-coding-agent-sdk/
 
 - [x] code-reviewer pass 1 (spec compliance): Phase 1 — Project scaffolding. Deviation noted: vitest `projects` (workspace-file feature, not in v2 InlineConfig) replaced with single `test/**/*.test.ts` include plus `test:examples` script running `vitest run --dir examples`. Done-when criterion (`npm install && npm run typecheck` on empty `src/index.ts`) is unaffected.
 - [x] code-reviewer pass 2 (code quality): Phase 1 — Project scaffolding. Scaffolding is clean; `noUncheckedIndexedAccess` adds useful strictness, `.gitignore` correctly omits `.plan`, no security or correctness concerns in this phase's files.
+- [x] code-reviewer pass 1 (spec compliance): Phase 2 — Core types and errors. All eight plan steps satisfied: Provider/PromptInput, SharedStartOpts with universal fields plus Claude/Gemini-tagged optional extras, RunOpts, ProviderExtras map keyed by Provider × event type, CoderStreamEvent discriminated union with typed `extra` and `originalItem` on every variant via EventBase, ThreadHandle/HeadlessCoder/RunResult/PermissionRequest/PermissionDecision/PermissionPolicy, full error hierarchy (CoderError, CliNotFoundError, CliVersionError, FeatureNotSupportedError, CliExitError), and expectTypeOf compile-time narrowing assertions. Only the listed files were added.
+- [x] code-reviewer pass 2 (code quality): Phase 2 — Core types and errors. Clean type surface: `ExtraFor<P,T>` gives discoverable narrowing, EventBase centralizes `ts`/`extra`/`originalItem` per the three-layer envelope, error classes set `name` correctly and preserve cause data (exitCode, signal, stderr tail). Minor non-blocking: `CliNotFoundError(bin, provider)` ordering makes the test site `new CliNotFoundError('claude', 'claude')` read ambiguously — callers will likely pass both as `'claude'` anyway; consider swapping in a later polish pass. No bugs, no duplication, no security concerns.
