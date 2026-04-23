@@ -28,7 +28,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:examples": "vitest run --dir examples",
+    "test:examples": "vitest run --config vitest.examples.config.ts",
     "test:watch": "vitest"
   },
   "dependencies": {

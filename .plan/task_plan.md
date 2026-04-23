@@ -239,7 +239,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## - [ ] Phase 12 — Live examples
+## - [x] Phase 12 — Live examples
 
 - Files: `examples/claude-stream.ts`, `examples/gemini-stream.ts`, `examples/custom-tools.ts`, `examples/structured-output.ts`
 - Steps:

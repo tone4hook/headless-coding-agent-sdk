@@ -102,3 +102,11 @@ Append-only timestamped events. New entries at the bottom.
 - Verified: typecheck 0, vitest 98/98 across 10 test files.
 
 ## 2026-04-23 16:23 — Phase 11 verified & complete
+
+## 2026-04-23 16:25 — Phase 12 started: Live examples
+
+- Wrote examples/{claude-stream,gemini-stream,custom-tools,structured-output}.ts — live vitest tests using `describe.skipIf(!hasBin(...))` gated by HCA_SKIP_LIVE env var, and also skipped when the CLI isn't installed.
+- Split vitest configs: vitest.config.ts (unit only, include `test/**`) and vitest.examples.config.ts (include `examples/**` with 180s timeout). npm scripts: `npm test` runs unit, `npm run test:examples` runs live examples.
+- Verified: typecheck 0, `npm test` 98/98 unit, `HCA_SKIP_LIVE=1 npm run test:examples` skips all 7 cleanly.
+
+## 2026-04-23 16:28 — Phase 12 verified & complete
