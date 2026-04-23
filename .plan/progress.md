@@ -92,3 +92,13 @@ Append-only timestamped events. New entries at the bottom.
 - Verified: typecheck 0, vitest 93/93 across 9 test files.
 
 ## 2026-04-23 16:18 — Phase 10 verified & complete
+
+## 2026-04-23 16:20 — Phase 11 started: Public API + generic factory
+
+- Wrote src/factory.ts: createCoder<P extends Provider>(name, defaults?) generic switch returning HeadlessCoder<P>. Unknown names throw at call time.
+- Filled in src/index.ts as the public API barrel: createCoder, createClaudeCoder, createGeminiCoder, tool, createToolRegistry, normalizeInputSchema, HttpMcpBridge, all error classes, all public types.
+- Wrote test/factory.test.ts — 5 tests (generic literal narrowing of coder, thread, event extras + runtime unknown-name throw + direct-factory parity).
+- Cast through `unknown` in createCoder because `HeadlessCoder<'claude'>` is not trivially assignable to `HeadlessCoder<P>` when P is a generic subtype constraint.
+- Verified: typecheck 0, vitest 98/98 across 10 test files.
+
+## 2026-04-23 16:23 — Phase 11 verified & complete
