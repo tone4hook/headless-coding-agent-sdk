@@ -60,7 +60,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## Phase 1 — Project scaffolding
+## - [x] Phase 1 — Project scaffolding
 
 - Files: `package.json`, `tsconfig.json`, `vitest.config.ts`, `.gitignore`, `README.md`
 - Steps:
@@ -74,7 +74,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## Phase 2 — Core types and errors
+## - [ ] Phase 2 — Core types and errors
 
 - Files: `src/types.ts`, `src/errors.ts`, `test/types.test.ts`
 - Steps:
@@ -90,7 +90,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## Phase 3 — Tool definition helpers
+## - [ ] Phase 3 — Tool definition helpers
 
 - Files: `src/tools/define.ts`, `test/define.test.ts`
 - Steps:
@@ -102,7 +102,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## Phase 4 — HTTP MCP bridge
+## - [ ] Phase 4 — HTTP MCP bridge
 
 - Files: `src/tools/bridge.ts`, `test/bridge.test.ts`
 - Steps:
@@ -114,7 +114,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## Phase 5 — Subprocess transport
+## - [ ] Phase 5 — Subprocess transport
 
 - Files: `src/transport/spawn.ts`, `src/transport/lines.ts`, `test/spawn.test.ts`
 - Steps:
@@ -125,7 +125,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## Phase 6 — Claude adapter: flags and skeleton
+## - [ ] Phase 6 — Claude adapter: flags and skeleton
 
 - Files: `src/adapters/claude/flags.ts`, `src/adapters/claude/index.ts`
 - Steps:
@@ -150,7 +150,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## Phase 7 — Claude adapter: event translator and wiring
+## - [ ] Phase 7 — Claude adapter: event translator and wiring
 
 - Files: `src/adapters/claude/translate.ts`, `src/adapters/claude/index.ts` (fill in), `test/fixtures/claude/hello.jsonl`, `test/fixtures/claude/tool-use.jsonl`, `test/translate-claude.test.ts`
 - Steps:
@@ -172,7 +172,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## Phase 8 — Gemini adapter: flags and skeleton
+## - [ ] Phase 8 — Gemini adapter: flags and skeleton
 
 - Files: `src/adapters/gemini/flags.ts`, `src/adapters/gemini/index.ts`
 - Steps:
@@ -192,7 +192,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## Phase 9 — Gemini adapter: ephemeral home + MCP wiring
+## - [ ] Phase 9 — Gemini adapter: ephemeral home + MCP wiring
 
 - Files: `src/adapters/gemini/home.ts`, `test/gemini-home.test.ts`
 - Steps:
@@ -207,7 +207,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## Phase 10 — Gemini adapter: event translator and wiring
+## - [ ] Phase 10 — Gemini adapter: event translator and wiring
 
 - Files: `src/adapters/gemini/translate.ts`, `src/adapters/gemini/index.ts` (fill in), `test/fixtures/gemini/hello.jsonl`, `test/fixtures/gemini/tool-use.jsonl`, `test/translate-gemini.test.ts`
 - Steps:
@@ -227,7 +227,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## Phase 11 — Public API and generic factory
+## - [ ] Phase 11 — Public API and generic factory
 
 - Files: `src/factory.ts`, `src/index.ts`, `test/factory.test.ts`
 - Steps:
@@ -239,7 +239,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## Phase 12 — Live examples
+## - [ ] Phase 12 — Live examples
 
 - Files: `examples/claude-stream.ts`, `examples/gemini-stream.ts`, `examples/custom-tools.ts`, `examples/structured-output.ts`
 - Steps:
@@ -252,7 +252,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## Phase 13 — Docs and polish
+## - [ ] Phase 13 — Docs and polish
 
 - Files: `README.md`, `docs/adapters.md`
 - Steps:
@@ -266,3 +266,6 @@ headless-coding-agent-sdk/
 ## Review sign-off
 
 (code-reviewer entries will be appended here per phase by `spec-powers:executing-plans`.)
+
+- [x] code-reviewer pass 1 (spec compliance): Phase 1 — Project scaffolding. Deviation noted: vitest `projects` (workspace-file feature, not in v2 InlineConfig) replaced with single `test/**/*.test.ts` include plus `test:examples` script running `vitest run --dir examples`. Done-when criterion (`npm install && npm run typecheck` on empty `src/index.ts`) is unaffected.
+- [x] code-reviewer pass 2 (code quality): Phase 1 — Project scaffolding. Scaffolding is clean; `noUncheckedIndexedAccess` adds useful strictness, `.gitignore` correctly omits `.plan`, no security or correctness concerns in this phase's files.

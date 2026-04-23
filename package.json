@@ -1,0 +1,46 @@
+{
+  "name": "headless-coding-agent-sdk",
+  "version": "0.1.0",
+  "description": "TypeScript SDK that unifies headless coding-agent CLI binaries (claude, gemini) behind one I/O schema.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./claude": {
+      "types": "./dist/adapters/claude/index.d.ts",
+      "import": "./dist/adapters/claude/index.js"
+    },
+    "./gemini": {
+      "types": "./dist/adapters/gemini/index.d.ts",
+      "import": "./dist/adapters/gemini/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "test:examples": "vitest run --dir examples",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
