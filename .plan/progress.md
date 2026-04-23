@@ -38,3 +38,13 @@ Append-only timestamped events. New entries at the bottom.
 - Verified: typecheck 0, vitest 26/26 across all test files.
 
 ## 2026-04-23 15:22 — Phase 4 verified & complete
+
+## 2026-04-23 15:25 — Phase 5 started: Subprocess transport
+
+- Wrote src/transport/lines.ts: chunkedToLines(readable) async iterator handling \n/\r\n line endings and multi-byte UTF-8 split across chunks.
+- Wrote src/transport/spawn.ts: spawnCli({bin,args,env,cwd,stdin,signal}) → {pid, lines, stderr, done, interrupt, kill}. First interrupt() sends SIGINT; second escalates to SIGTERM. AbortSignal support.
+- Bug found + fixed during TDD: initial escalation guard `child.killed` short-circuited after the first signal (Node's `killed` flag flips on signal delivery, not on exit). Replaced with an internal `childExited` latch set on the 'close' event.
+- Wrote test/spawn.test.ts — 13 tests covering chunkedToLines (5 variants), spawnCli stdout/stderr separation, stdin, SIGINT, SIGTERM escalation, AbortSignal (pre-abort + running), explicit kill().
+- Verified: typecheck 0, vitest 39/39 across all test files.
+
+## 2026-04-23 15:33 — Phase 5 verified & complete
