@@ -75,3 +75,11 @@ Append-only timestamped events. New entries at the bottom.
 - Verified: typecheck 0, vitest 11/11 gemini-flags.test.ts, full suite 73/73.
 
 ## 2026-04-23 16:03 — Phase 8 verified & complete
+
+## 2026-04-23 16:05 — Phase 9 started: Gemini ephemeral home + MCP wiring
+
+- Wrote src/adapters/gemini/home.ts: setupEphemeralGeminiHome({bridgeUrl, mcpServerName, realHome?}) → {home, env:{GEMINI_CLI_HOME}, cleanup}. Creates mkdtemp'd dir, writes merged settings.json (user settings preserved, mcpServers augmented with our bridge), symlinks pass-through entries (oauth_creds.json, google_accounts.json, installation_id, trustedFolders.json, projects.json, state.json, extension_integrity.json, extensions/) from real ~/.gemini when present. cleanup() guards against rm'ing outside os.tmpdir().
+- Wrote test/gemini-home.test.ts — 7 tests: ephemeral path under tmpdir, settings merge preserves user keys, symlinks resolve to real-home files, missing real-home entries skipped gracefully, cleanup removes ephemeral dir without touching real home, cleanup refuses out-of-tmpdir paths, works with a fully-missing real home.
+- Verified: typecheck 0, vitest 7/7, full suite 80/80.
+
+## 2026-04-23 16:10 — Phase 9 verified & complete
