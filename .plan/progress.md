@@ -57,3 +57,12 @@ Append-only timestamped events. New entries at the bottom.
 - Verified: typecheck 0, vitest 9/9 claude-flags.test.ts, full suite 48/48.
 
 ## 2026-04-23 15:42 — Phase 6 verified & complete
+
+- Captured test/fixtures/claude/hello.jsonl by running `claude -p hello --output-format stream-json --verbose --max-turns 1` (5 lines: hook_started, hook_response, init, assistant-with-auth-error, result-is_error:true).
+- Hand-crafted test/fixtures/claude/tool-use.jsonl based on the documented Claude stream-json shape (init, assistant-with-text-and-tool_use, user-with-tool_result, assistant-final, result). Live capture of a tool_use trace wasn't possible because the local claude install has a bad API key; the synthetic fixture matches the shape exactly.
+- Wrote src/adapters/claude/translate.ts: pure function `translateClaudeLine(line: string) → CoderStreamEvent<'claude'>[]`. Handles system/{init, hook_started, hook_response}, assistant/{text, tool_use, thinking} content items, user/tool_result items, and result lines (emitting usage + optional error + done). Drops malformed or unknown-type lines; surfaces unknown system subtypes as progress.
+- Filled in src/adapters/claude/index.ts: ClaudeThread.runStreamed spawns the CLI, pipes stdout lines through translator, captures threadId from the init event. When tools are supplied, spins up HttpMcpBridge + writes ephemeral `--mcp-config` JSON. run() aggregates events into RunResult. interrupt/close/cleanup wired. fork() requires an established thread id.
+- Wrote test/translate-claude.test.ts — 13 tests covering both fixtures and malformed input.
+- Verified: typecheck 0, vitest 62/62 across 6 test files.
+
+## 2026-04-23 15:58 — Phase 7 verified & complete
