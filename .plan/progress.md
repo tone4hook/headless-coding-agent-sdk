@@ -28,3 +28,13 @@ Append-only timestamped events. New entries at the bottom.
 - Verified: typecheck 0, vitest 20/20 across both test files.
 
 ## 2026-04-23 15:01 — Phase 3 verified & complete
+
+## 2026-04-23 15:08 — Phase 4 started: HTTP MCP bridge
+
+- Wrote src/tools/bridge.ts: HttpMcpBridge class wrapping Node http server + StreamableHTTPServerTransport from @modelcontextprotocol/sdk. Per-thread bridge bound to 127.0.0.1:0. Exposes `url` (http://127.0.0.1:<port>/mcp) and `toolNamePrefix` (`mcp__<serverName>__`).
+- Debugging finding: reusing a single low-level Server+Transport pair across requests caused the second request (tools/list after initialize) to return HTTP 500 with an empty body from Hono's node-adapter — cause not root-caused but reliably reproducible.
+- Fix: build a fresh Server+Transport per HTTP request. Registry is the long-lived state; MCP streamable-HTTP transport is stateless per design, so this matches the protocol shape. JSON response mode (`enableJsonResponse: true`) now works end-to-end.
+- Wrote test/bridge.test.ts — 6 tests exercising real HTTP JSON-RPC: URL format, tools/list, tools/call, handler-throws → isError:true, port release on close, toolNamePrefix.
+- Verified: typecheck 0, vitest 26/26 across all test files.
+
+## 2026-04-23 15:22 — Phase 4 verified & complete
