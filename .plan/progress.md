@@ -19,3 +19,12 @@ Append-only timestamped events. New entries at the bottom.
 - Deprecation warnings on `toMatchTypeOf` (vitest 2.1 — non-blocking).
 
 ## 2026-04-23 14:52 — Phase 2 verified & complete
+
+## 2026-04-23 14:55 — Phase 3 started: Tool definition helpers
+
+- Wrote src/tools/define.ts: tool(), normalizeInputSchema() (handles simple records, JSON Schema pass-through, .toJsonSchema/.toJSONSchema on parse-compatible, permissive fallback), createToolRegistry() with list/get/invoke and duplicate-name guard.
+- Fixed generic variance: widened ToolRegistry input to ToolDefinition<any>[] and SharedStartOpts.tools likewise, because TArgs sits in a contravariant handler position and ToolDefinition<{a,b}> is not assignable to ToolDefinition<unknown>.
+- Wrote test/define.test.ts — 12 tests covering all schema forms, registry list/get/invoke, parse-as-validator, duplicate-name rejection.
+- Verified: typecheck 0, vitest 20/20 across both test files.
+
+## 2026-04-23 15:01 — Phase 3 verified & complete

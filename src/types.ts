@@ -131,7 +131,7 @@ export interface SharedStartOpts {
   /** Pre-allowlisted tool names. Both adapters (distinct flag names). */
   allowedTools?: string[];
   /** Custom tools surfaced via the in-process MCP bridge. Both adapters. */
-  tools?: ToolDefinition[];
+  tools?: ToolDefinition<any>[];
   /** Static permission policy — mapped per-adapter to native flags. Both adapters. */
   permissionPolicy?: PermissionPolicy;
   /** Extra env vars for the spawned CLI. Both adapters. */
