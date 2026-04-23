@@ -48,3 +48,12 @@ Append-only timestamped events. New entries at the bottom.
 - Verified: typecheck 0, vitest 39/39 across all test files.
 
 ## 2026-04-23 15:33 — Phase 5 verified & complete
+
+## 2026-04-23 15:36 — Phase 6 started: Claude adapter flags + skeleton
+
+- Wrote src/adapters/claude/flags.ts: buildClaudeArgv({prompt, opts, resumeId?, continueLatest?, mcpConfigPath?}) emits the verified claude 2.1.118 argv. Rejects Gemini-only fields (yolo, sandbox, approvalMode, policyFiles, adminPolicyFiles, extensions, includeDirectories, allowedMcpServerNames) with FeatureNotSupportedError. outputSchema → --json-schema. permissionPolicy shared enum mapped to native --permission-mode + --allowed-tools/--disallowed-tools.
+- Wrote src/adapters/claude/index.ts: ClaudeCoder skeleton exposing startThread/resumeThread/resumeLatest/close; ClaudeThread.run/runStreamed/fork throw "Not implemented (Phase 7)".
+- Wrote test/claude-flags.test.ts — 9 tests.
+- Verified: typecheck 0, vitest 9/9 claude-flags.test.ts, full suite 48/48.
+
+## 2026-04-23 15:42 — Phase 6 verified & complete
