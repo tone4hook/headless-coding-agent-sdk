@@ -83,3 +83,12 @@ Append-only timestamped events. New entries at the bottom.
 - Verified: typecheck 0, vitest 7/7, full suite 80/80.
 
 ## 2026-04-23 16:10 — Phase 9 verified & complete
+
+- Captured test/fixtures/gemini/hello.jsonl live from `gemini -p "say hi in 3 words" --output-format stream-json -y` (4 real lines: init, user-message, assistant-message, result).
+- Hand-crafted test/fixtures/gemini/tool-use.jsonl using the live-captured stream-json shapes (init, user, assistant, tool_use, tool_result, assistant-final, result).
+- Wrote src/adapters/gemini/translate.ts: translateGeminiLine. init→init, message→message (with delta bit), tool_use→tool_use (tool_name/tool_id/parameters → name/callId/args), tool_result→tool_result (status=error sets error field), result→usage+[error]+done. toTs() parses ISO timestamps; falls back to Date.now().
+- Filled in src/adapters/gemini/index.ts: GeminiThread.runStreamed spawns the CLI, injects prompt preamble for best-effort outputSchema, wires MCP bridge + ephemeral GEMINI_CLI_HOME when tools[] is present. run() aggregates events. fork() throws FeatureNotSupportedError.
+- Wrote test/translate-gemini.test.ts — 13 tests covering both fixtures, edge cases, error branches.
+- Verified: typecheck 0, vitest 93/93 across 9 test files.
+
+## 2026-04-23 16:18 — Phase 10 verified & complete

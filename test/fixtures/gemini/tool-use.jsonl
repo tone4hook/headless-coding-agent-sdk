@@ -1,0 +1,7 @@
+{"type":"init","timestamp":"2026-04-23T15:05:00.000Z","session_id":"aaaabbbb-1111-2222-3333-ccccddddeeee","model":"gemini-3-flash-preview"}
+{"type":"message","timestamp":"2026-04-23T15:05:00.001Z","role":"user","content":"list files in cwd"}
+{"type":"message","timestamp":"2026-04-23T15:05:01.000Z","role":"assistant","content":"I will check.","delta":true}
+{"type":"tool_use","timestamp":"2026-04-23T15:05:01.010Z","tool_name":"list_directory","tool_id":"list_directory_1000_0","parameters":{"path":"."}}
+{"type":"tool_result","timestamp":"2026-04-23T15:05:01.050Z","tool_id":"list_directory_1000_0","status":"success","output":"a.txt\nb.txt"}
+{"type":"message","timestamp":"2026-04-23T15:05:02.000Z","role":"assistant","content":"There are two files: a.txt and b.txt.","delta":true}
+{"type":"result","timestamp":"2026-04-23T15:05:02.010Z","status":"success","stats":{"total_tokens":200,"input_tokens":180,"output_tokens":20,"cached":0,"input":180,"duration_ms":2010,"tool_calls":1,"models":{"gemini-3-flash-preview":{"total_tokens":200,"input_tokens":180,"output_tokens":20,"cached":0,"input":180}}}}
