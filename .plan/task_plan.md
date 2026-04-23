@@ -252,7 +252,7 @@ headless-coding-agent-sdk/
 
 ---
 
-## - [ ] Phase 13 — Docs and polish
+## - [x] Phase 13 — Docs and polish
 
 - Files: `README.md`, `docs/adapters.md`
 - Steps:

@@ -110,3 +110,13 @@ Append-only timestamped events. New entries at the bottom.
 - Verified: typecheck 0, `npm test` 98/98 unit, `HCA_SKIP_LIVE=1 npm run test:examples` skips all 7 cleanly.
 
 ## 2026-04-23 16:28 — Phase 12 verified & complete
+
+## 2026-04-23 16:30 — Phase 13 started: Docs and polish
+
+- Rewrote README.md with quickstart, streaming, custom-tools, resume, structured-output, subpath imports, design-principle pointer, and status.
+- Wrote docs/adapters.md: full per-field coverage matrix (StartOpts universal + Claude-only + Gemini-only + RunOpts) with flag mappings and rejection behavior; event translation reference mapping unified events to each CLI's source lines.
+- Wrote CHANGELOG.md with the 0.1.0 entry.
+- Verified: typecheck 0, npm test 98/98 unit.
+
+## 2026-04-23 16:33 — Phase 13 verified & complete
+## 2026-04-23 16:33 — ALL PHASES COMPLETE (13/13)
