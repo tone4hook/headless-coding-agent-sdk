@@ -250,3 +250,4 @@ Event translator mapping to unified `CoderStreamEvent`:
 - Gemini `outputSchema` best-effort prompt template (inject schema into system prompt, set `--output-format json`, parse assistant text as JSON).
 - Logging / debug hook (`onRawLine(line: string): void` on `StartOpts`) for troubleshooting event translation without exposing internals as a stable API.
 - Future extension: bidirectional mode for Claude via `--input-format stream-json` and for Gemini via `--acp`, once a use case (live permission callbacks, streaming user messages back into a running turn) justifies the complexity.
+<!-- SPEC-POWERS-SESSION-1777014268-88445 -->
