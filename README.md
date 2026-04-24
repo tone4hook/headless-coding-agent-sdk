@@ -12,17 +12,32 @@ installed CLI already has configured on your machine.
 
 ## Installation
 
-```sh
-npm install headless-coding-agent-sdk
-# plus the CLI(s) you plan to use:
-# npm install -g @anthropic-ai/claude-code
-# npm install -g @google/gemini-cli
-```
+This package is published to **GitHub Packages**, so installing it requires a
+one-time auth setup.
+
+1. Create a GitHub [Personal Access Token (classic)](https://github.com/settings/tokens)
+   with the `read:packages` scope.
+2. Add the following to `~/.npmrc` (or a project-level `.npmrc`), substituting
+   your token:
+
+   ```
+   @tone4hook:registry=https://npm.pkg.github.com
+   //npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN
+   ```
+
+3. Install:
+
+   ```sh
+   npm install @tone4hook/headless-coding-agent-sdk
+   # plus the CLI(s) you plan to use:
+   # npm install -g @anthropic-ai/claude-code
+   # npm install -g @google/gemini-cli
+   ```
 
 ## 60-second quickstart
 
 ```ts
-import { createCoder } from 'headless-coding-agent-sdk';
+import { createCoder } from '@tone4hook/headless-coding-agent-sdk';
 
 const coder = createCoder('claude'); // or 'gemini'
 const thread = await coder.startThread();
@@ -46,7 +61,7 @@ for await (const ev of thread.runStreamed('plan a migration')) {
 ### Custom tools (works on both adapters)
 
 ```ts
-import { createCoder, tool } from 'headless-coding-agent-sdk';
+import { createCoder, tool } from '@tone4hook/headless-coding-agent-sdk';
 
 const weather = tool({
   name: 'get_weather',
@@ -103,8 +118,8 @@ coverage matrix.
 ## Subpath imports
 
 ```ts
-import { createClaudeCoder } from 'headless-coding-agent-sdk/claude';
-import { createGeminiCoder } from 'headless-coding-agent-sdk/gemini';
+import { createClaudeCoder } from '@tone4hook/headless-coding-agent-sdk/claude';
+import { createGeminiCoder } from '@tone4hook/headless-coding-agent-sdk/gemini';
 ```
 
 ## Status
