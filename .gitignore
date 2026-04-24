@@ -23,6 +23,10 @@ npm-debug.log*
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
 
+# Local planning / specs
+.plan/
+specs/
+
 # Editors
 .vscode/
 .idea/
