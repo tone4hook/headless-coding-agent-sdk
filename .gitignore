@@ -1,8 +1,29 @@
+# Node
 node_modules
 dist
-*.log
-.DS_Store
-.env
-.env.local
 coverage
 .vitest-cache
+*.log
+npm-debug.log*
+
+# Env
+.env
+.env.local
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.DocumentRevisions-V100
+.TemporaryItems
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+
+# Editors
+.vscode/
+.idea/
+*.swp
