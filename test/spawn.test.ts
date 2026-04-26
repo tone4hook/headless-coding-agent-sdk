@@ -126,6 +126,20 @@ describe('spawnCli', () => {
     expect(exitCode === null || exitCode !== 0 || signal !== null).toBe(true);
   });
 
+  it('closes stdin when opts.stdin is undefined so children that read stdin can exit', async () => {
+    // `cat` reads stdin until EOF. If spawnCli leaves stdin open when no
+    // opts.stdin is provided, cat blocks forever. Closing stdin immediately
+    // lets cat exit cleanly with code 0.
+    const cli = spawnCli({ bin: 'cat' });
+    const result = await Promise.race([
+      cli.done,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('child did not exit — stdin left open')), 1000),
+      ),
+    ]);
+    expect(result.exitCode).toBe(0);
+  }, 1500);
+
   it('kill() sends SIGTERM immediately', async () => {
     const cli = spawnCli({
       bin: process.execPath,

@@ -73,6 +73,10 @@ export function spawnCli(opts: SpawnCliOptions): SpawnedCli {
 
   if (opts.stdin !== undefined) {
     child.stdin.end(opts.stdin);
+  } else {
+    // Signal EOF immediately so children that read stdin (e.g. the Claude
+    // CLI in stream-json mode) don't wait for input that isn't coming.
+    child.stdin.end();
   }
 
   let interruptsSent = 0;
