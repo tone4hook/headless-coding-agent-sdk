@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 — 2026-04-27
+
+### Fixed
+- `fix(transport): close stdin at EOF when no payload provided` — `spawnCli` now sends EOF on `child.stdin` when no `opts.stdin` is supplied. Eliminates the ~3s/turn latency the Claude CLI incurred while waiting for possible stream-json stdin input before falling back to the argv `-p` prompt.
+
 ## 0.2.0 — UX-parity additions
 
 Three additive features that close the parity gap with a hand-rolled
