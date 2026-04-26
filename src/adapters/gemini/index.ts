@@ -14,7 +14,8 @@ import type {
 } from '../../types.js';
 import { HttpMcpBridge } from '../../tools/bridge.js';
 import { createToolRegistry } from '../../tools/define.js';
-import { spawnCli, type SpawnedCli } from '../../transport/spawn.js';
+import { composeEnv, spawnCli, type SpawnedCli } from '../../transport/spawn.js';
+import { mergeStdoutStderr } from '../../transport/lines.js';
 import { buildGeminiArgv } from './flags.js';
 import { setupEphemeralGeminiHome, type EphemeralHome } from './home.js';
 import { translateGeminiLine } from './translate.js';
@@ -130,10 +131,11 @@ class GeminiThread implements ThreadHandle<'gemini'> {
     }
 
     // Custom tools: set up MCP bridge + ephemeral GEMINI_CLI_HOME.
-    const env: NodeJS.ProcessEnv = {
-      ...process.env,
-      ...(effectiveOpts.extraEnv ?? {}),
-    };
+    const env: NodeJS.ProcessEnv = composeEnv(
+      process.env,
+      effectiveOpts.extraEnv,
+      effectiveOpts.unsetEnv,
+    );
     if (effectiveOpts.tools && effectiveOpts.tools.length > 0) {
       const registry = createToolRegistry(effectiveOpts.tools);
       this.bridge = new HttpMcpBridge({ registry });
@@ -161,14 +163,24 @@ class GeminiThread implements ThreadHandle<'gemini'> {
     });
 
     const stderrChunks: string[] = [];
-    const stderrCollector = (async () => {
-      for await (const line of this.active!.stderr) stderrChunks.push(line);
-    })();
 
     try {
-      for await (const line of this.active.lines) {
-        effectiveOpts.onRawLine?.(line);
-        for (const ev of translateGeminiLine(line)) {
+      for await (const item of mergeStdoutStderr(
+        this.active.lines,
+        this.active.stderr,
+      )) {
+        if (item.src === 'stderr') {
+          stderrChunks.push(item.line);
+          yield {
+            provider: 'gemini',
+            type: 'stderr',
+            line: item.line,
+            ts: Date.now(),
+          };
+          continue;
+        }
+        effectiveOpts.onRawLine?.(item.line);
+        for (const ev of translateGeminiLine(item.line)) {
           if (!this.id && ev.type === 'init' && ev.threadId) {
             this.id = ev.threadId;
           }
@@ -177,7 +189,6 @@ class GeminiThread implements ThreadHandle<'gemini'> {
       }
     } finally {
       const { exitCode, signal } = await this.active.done;
-      await stderrCollector;
       await this.cleanup();
       if (exitCode !== 0 && signal === null) {
         throw new CliExitError('gemini', exitCode, signal, stderrChunks.join('\n'));

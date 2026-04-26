@@ -136,6 +136,15 @@ export interface SharedStartOpts {
   permissionPolicy?: PermissionPolicy;
   /** Extra env vars for the spawned CLI. Both adapters. */
   extraEnv?: Record<string, string>;
+  /**
+   * Env var names to delete from the spawn env after `extraEnv` is applied.
+   * Empty-string values in `extraEnv` are preserved as legitimate values, so
+   * stripping requires this explicit list. Common use: remove stale auth env
+   * (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`,
+   * `CLAUDE_CODE_USE_VERTEX`) to force the CLI's OAuth / keychain fallback.
+   * Both adapters.
+   */
+  unsetEnv?: string[];
   /** Debug hook — invoked for every raw stdout line before translation. Both adapters. */
   onRawLine?: (line: string) => void;
 
@@ -294,6 +303,7 @@ export interface ProviderExtras {
     file_change: Record<string, never>;
     plan_update: Record<string, never>;
     cancelled: Record<string, never>;
+    stderr: Record<string, never>;
   };
   gemini: {
     init: {
@@ -325,6 +335,7 @@ export interface ProviderExtras {
     file_change: Record<string, never>;
     plan_update: Record<string, never>;
     cancelled: Record<string, never>;
+    stderr: Record<string, never>;
   };
 }
 
@@ -341,7 +352,8 @@ export type CoderStreamEventType =
   | 'usage'
   | 'error'
   | 'cancelled'
-  | 'done';
+  | 'done'
+  | 'stderr';
 
 /** Lookup the extras shape for a provider × event type pair. */
 export type ExtraFor<
@@ -411,7 +423,8 @@ export type CoderStreamEvent<P extends Provider = Provider> =
       message: string;
     } & EventBase<P, 'error'>)
   | ({ type: 'cancelled' } & EventBase<P, 'cancelled'>)
-  | ({ type: 'done' } & EventBase<P, 'done'>);
+  | ({ type: 'done' } & EventBase<P, 'done'>)
+  | ({ type: 'stderr'; line: string } & EventBase<P, 'stderr'>);
 
 export type EventIterator<P extends Provider = Provider> = AsyncIterable<
   CoderStreamEvent<P>

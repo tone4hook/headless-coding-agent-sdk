@@ -31,6 +31,35 @@ export interface SpawnedCli {
   kill(): void;
 }
 
+/**
+ * Compose a child-process env from a parent env, overlay, and unset list.
+ *
+ * Order of operations:
+ *   1. Clone `parentEnv`.
+ *   2. Spread `extraEnv` (empty strings are preserved as legitimate values).
+ *   3. Delete every key listed in `unsetEnv` (last word — wins over a
+ *      same-key `extraEnv` value).
+ *
+ * Used by adapters to honor `SharedStartOpts.extraEnv` and `unsetEnv`. The
+ * `unsetEnv` field exists so callers can strip stale auth env vars
+ * (e.g. `ANTHROPIC_API_KEY`) and force the CLI to fall back to OAuth /
+ * keychain credentials, which is otherwise impossible because empty-string
+ * values do not unset.
+ */
+export function composeEnv(
+  parentEnv: NodeJS.ProcessEnv,
+  extraEnv?: Record<string, string>,
+  unsetEnv?: string[],
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...parentEnv, ...(extraEnv ?? {}) };
+  if (unsetEnv) {
+    for (const key of unsetEnv) {
+      delete env[key];
+    }
+  }
+  return env;
+}
+
 export function spawnCli(opts: SpawnCliOptions): SpawnedCli {
   if (opts.signal?.aborted) {
     throw new Error('spawnCli: AbortSignal already aborted');

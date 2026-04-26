@@ -30,8 +30,40 @@ export function translateClaudeLine(line: string): ClaudeEvent[] {
   if (type === 'assistant') return handleAssistant(raw, ts);
   if (type === 'user') return handleUser(raw, ts);
   if (type === 'result') return handleResult(raw, ts);
+  if (type === 'stream_event') return handleStreamEvent(raw, ts);
 
   return [];
+}
+
+/**
+ * `stream_event` lines are emitted only when the CLI is invoked with
+ * `--include-partial-messages`. We surface text deltas as `delta:true`
+ * message events; all other subtypes are dropped (callers can still see
+ * them via `onRawLine`). Thinking deltas are intentionally skipped in v1.
+ */
+function handleStreamEvent(
+  raw: Record<string, unknown>,
+  ts: number,
+): ClaudeEvent[] {
+  const event = raw.event as Record<string, unknown> | undefined;
+  if (!event) return [];
+  if (event.type !== 'content_block_delta') return [];
+  const delta = event.delta as Record<string, unknown> | undefined;
+  if (!delta || delta.type !== 'text_delta') return [];
+  const chunk = delta.text;
+  if (typeof chunk !== 'string' || chunk.length === 0) return [];
+  return [
+    {
+      type: 'message',
+      provider: 'claude',
+      role: 'assistant',
+      text: chunk,
+      delta: true,
+      ts,
+      extra: { eventUuid: raw.uuid as string | undefined },
+      originalItem: raw,
+    },
+  ];
 }
 
 function handleSystem(raw: Record<string, unknown>, ts: number): ClaudeEvent[] {

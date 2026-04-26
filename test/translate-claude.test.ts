@@ -143,3 +143,69 @@ describe('translateClaudeLine — malformed input', () => {
     expect(ev[0]!.originalItem).toMatchObject({ subtype: 'some_future_event' });
   });
 });
+
+describe('translateClaudeLine — partial-messages fixture', () => {
+  const events = translateFixture('test/fixtures/claude/partial-messages.jsonl');
+
+  it('emits init, three delta:true messages, final aggregate, usage, done', () => {
+    const types = events.map((e) => e.type);
+    expect(types).toEqual([
+      'init',
+      'message',
+      'message',
+      'message',
+      'message',
+      'usage',
+      'done',
+    ]);
+  });
+
+  it('first three messages are delta:true text chunks in order', () => {
+    const messages = events.filter((e) => e.type === 'message');
+    expect(messages).toHaveLength(4);
+    const deltas = messages.slice(0, 3) as Array<
+      Extract<CoderStreamEvent<'claude'>, { type: 'message' }>
+    >;
+    expect(deltas.map((m) => m.text)).toEqual(['He', 'llo', ' world']);
+    expect(deltas.every((m) => m.delta === true)).toBe(true);
+    expect(deltas.every((m) => m.role === 'assistant')).toBe(true);
+  });
+
+  it('fourth message is the final delta:false aggregate', () => {
+    const messages = events.filter((e) => e.type === 'message') as Array<
+      Extract<CoderStreamEvent<'claude'>, { type: 'message' }>
+    >;
+    const finalMsg = messages[3]!;
+    expect(finalMsg.text).toBe('Hello world');
+    expect(finalMsg.delta).toBe(false);
+  });
+
+  it('drops non-text-delta stream_event subtypes', () => {
+    // message_start / content_block_start/stop / message_delta / message_stop
+    // are all stream_events but yield zero events.
+    expect(
+      translateClaudeLine(
+        JSON.stringify({ type: 'stream_event', event: { type: 'message_start' } }),
+      ),
+    ).toEqual([]);
+    expect(
+      translateClaudeLine(
+        JSON.stringify({
+          type: 'stream_event',
+          event: { type: 'content_block_delta', delta: { type: 'thinking_delta', thinking: 'x' } },
+        }),
+      ),
+    ).toEqual([]);
+  });
+
+  it('drops empty-string text_delta', () => {
+    expect(
+      translateClaudeLine(
+        JSON.stringify({
+          type: 'stream_event',
+          event: { type: 'content_block_delta', delta: { type: 'text_delta', text: '' } },
+        }),
+      ),
+    ).toEqual([]);
+  });
+});

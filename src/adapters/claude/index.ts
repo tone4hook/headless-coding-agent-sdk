@@ -17,7 +17,8 @@ import {
 } from '../../types.js';
 import { HttpMcpBridge } from '../../tools/bridge.js';
 import { createToolRegistry } from '../../tools/define.js';
-import { spawnCli, type SpawnedCli } from '../../transport/spawn.js';
+import { composeEnv, spawnCli, type SpawnedCli } from '../../transport/spawn.js';
+import { mergeStdoutStderr } from '../../transport/lines.js';
 import { buildClaudeArgv } from './flags.js';
 import { translateClaudeLine } from './translate.js';
 
@@ -89,7 +90,14 @@ class ClaudeThread implements ThreadHandle<'claude'> {
 
     for await (const ev of this.runStreamed(input, runOpts)) {
       events.push(ev);
-      if (ev.type === 'message' && ev.role === 'assistant' && ev.text) {
+      if (
+        ev.type === 'message' &&
+        ev.role === 'assistant' &&
+        ev.text &&
+        !ev.delta
+      ) {
+        // Skip delta:true chunks — the final aggregated message is emitted
+        // separately at message_stop and already contains the full text.
         text = (text ?? '') + ev.text;
       }
       if (ev.type === 'usage') usage = ev.stats;
@@ -158,20 +166,30 @@ class ClaudeThread implements ThreadHandle<'claude'> {
     this.active = spawnCli({
       bin: 'claude',
       args: argv,
-      env: { ...process.env, ...(effectiveOpts.extraEnv ?? {}) },
+      env: composeEnv(process.env, effectiveOpts.extraEnv, effectiveOpts.unsetEnv),
       cwd: effectiveOpts.workingDirectory,
       signal: runOpts?.signal,
     });
 
     const stderrChunks: string[] = [];
-    const stderrCollector = (async () => {
-      for await (const line of this.active!.stderr) stderrChunks.push(line);
-    })();
 
     try {
-      for await (const line of this.active.lines) {
-        effectiveOpts.onRawLine?.(line);
-        for (const ev of translateClaudeLine(line)) {
+      for await (const item of mergeStdoutStderr(
+        this.active.lines,
+        this.active.stderr,
+      )) {
+        if (item.src === 'stderr') {
+          stderrChunks.push(item.line);
+          yield {
+            provider: 'claude',
+            type: 'stderr',
+            line: item.line,
+            ts: Date.now(),
+          };
+          continue;
+        }
+        effectiveOpts.onRawLine?.(item.line);
+        for (const ev of translateClaudeLine(item.line)) {
           if (!this.id && ev.type === 'init' && ev.threadId) {
             this.id = ev.threadId;
           }
@@ -180,7 +198,6 @@ class ClaudeThread implements ThreadHandle<'claude'> {
       }
     } finally {
       const { exitCode, signal } = await this.active.done;
-      await stderrCollector;
       await this.cleanup();
       if (exitCode !== 0 && signal === null) {
         throw new CliExitError('claude', exitCode, signal, stderrChunks.join('\n'));

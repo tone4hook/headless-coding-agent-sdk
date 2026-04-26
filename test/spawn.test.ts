@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { spawnCli } from '../src/transport/spawn.js';
-import { chunkedToLines } from '../src/transport/lines.js';
+import { spawnCli, composeEnv } from '../src/transport/spawn.js';
+import { chunkedToLines, mergeStdoutStderr } from '../src/transport/lines.js';
 import { Readable } from 'node:stream';
 
 async function collect<T>(iter: AsyncIterable<T>): Promise<T[]> {
@@ -134,5 +134,125 @@ describe('spawnCli', () => {
     setTimeout(() => cli.kill(), 50);
     const { signal } = await cli.done;
     expect(signal).toBe('SIGTERM');
+  });
+});
+
+describe('composeEnv', () => {
+  const parent = { FOO: 'foo', BAR: 'bar', BAZ: 'baz' } as NodeJS.ProcessEnv;
+
+  it('returns a clone of the parent env when no extras or unsets', () => {
+    const env = composeEnv(parent);
+    expect(env).toEqual(parent);
+    expect(env).not.toBe(parent);
+  });
+
+  it('overlays extraEnv on top of the parent', () => {
+    const env = composeEnv(parent, { FOO: 'overridden', NEW: 'n' });
+    expect(env.FOO).toBe('overridden');
+    expect(env.NEW).toBe('n');
+    expect(env.BAR).toBe('bar');
+  });
+
+  it('preserves empty-string extraEnv values verbatim (does NOT delete)', () => {
+    const env = composeEnv(parent, { FOO: '' });
+    expect(Object.prototype.hasOwnProperty.call(env, 'FOO')).toBe(true);
+    expect(env.FOO).toBe('');
+  });
+
+  it('deletes parent keys listed in unsetEnv', () => {
+    const env = composeEnv(parent, undefined, ['FOO']);
+    expect('FOO' in env).toBe(false);
+    expect(env.BAR).toBe('bar');
+  });
+
+  it('unsetEnv overrides a same-key extraEnv (delete wins)', () => {
+    const env = composeEnv(parent, { FOO: 'overridden' }, ['FOO']);
+    expect('FOO' in env).toBe(false);
+  });
+
+  it('skips no-op unsetEnv keys that are not present', () => {
+    const env = composeEnv(parent, undefined, ['NOPE']);
+    expect(env).toEqual(parent);
+  });
+
+  it('composed env reaches spawnCli children (parent key stripped)', async () => {
+    const parentWithKey: NodeJS.ProcessEnv = {
+      ...process.env,
+      HCA_TEST_STRIP: 'should-be-gone',
+    };
+    const env = composeEnv(parentWithKey, undefined, ['HCA_TEST_STRIP']);
+    const cli = spawnCli({
+      bin: process.execPath,
+      args: [
+        '-e',
+        "process.stdout.write(JSON.stringify({has: 'HCA_TEST_STRIP' in process.env}))",
+      ],
+      env,
+    });
+    let out = '';
+    for await (const line of cli.lines) out += line;
+    await cli.done;
+    expect(JSON.parse(out)).toEqual({ has: false });
+  });
+});
+
+describe('mergeStdoutStderr', () => {
+  async function fromArray(items: string[], delayMs = 0): Promise<AsyncIterable<string>> {
+    return (async function* () {
+      for (const it of items) {
+        if (delayMs) await new Promise((r) => setTimeout(r, delayMs));
+        yield it;
+      }
+    })();
+  }
+
+  it('yields all lines from both streams, tagged with src', async () => {
+    const stdout = await fromArray(['a', 'b']);
+    const stderr = await fromArray(['x', 'y']);
+    const merged: { src: string; line: string }[] = [];
+    for await (const item of mergeStdoutStderr(stdout, stderr)) merged.push(item);
+    const stdoutLines = merged.filter((m) => m.src === 'stdout').map((m) => m.line);
+    const stderrLines = merged.filter((m) => m.src === 'stderr').map((m) => m.line);
+    expect(stdoutLines).toEqual(['a', 'b']);
+    expect(stderrLines).toEqual(['x', 'y']);
+    expect(merged).toHaveLength(4);
+  });
+
+  it('interleaves arrival order across the two streams', async () => {
+    // stderr lands first because stdout is delayed
+    const slow = (async function* () {
+      await new Promise((r) => setTimeout(r, 30));
+      yield 'late';
+    })();
+    const fast = (async function* () {
+      yield 'early';
+    })();
+    const order: string[] = [];
+    for await (const item of mergeStdoutStderr(slow, fast))
+      order.push(`${item.src}:${item.line}`);
+    expect(order).toEqual(['stderr:early', 'stdout:late']);
+  });
+
+  it('exhausts both iterators before returning', async () => {
+    const stdout = await fromArray(['only-stdout']);
+    const stderr = await fromArray([]);
+    const merged: { src: string; line: string }[] = [];
+    for await (const item of mergeStdoutStderr(stdout, stderr)) merged.push(item);
+    expect(merged).toEqual([{ src: 'stdout', line: 'only-stdout' }]);
+  });
+
+  it('end-to-end via spawnCli: yields a stderr event live, before exit', async () => {
+    const cli = spawnCli({
+      bin: process.execPath,
+      args: [
+        '-e',
+        "process.stderr.write('boom\\n'); setTimeout(()=>{process.stdout.write('ok\\n');process.exit(0)}, 10);",
+      ],
+    });
+    const items: { src: string; line: string }[] = [];
+    for await (const item of mergeStdoutStderr(cli.lines, cli.stderr)) items.push(item);
+    await cli.done;
+    expect(items).toContainEqual({ src: 'stderr', line: 'boom' });
+    expect(items).toContainEqual({ src: 'stdout', line: 'ok' });
   });
 });

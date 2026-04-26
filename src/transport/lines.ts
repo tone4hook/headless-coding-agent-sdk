@@ -30,3 +30,55 @@ export async function* chunkedToLines(
     yield buf;
   }
 }
+
+/**
+ * Merge two async iterables of lines, tagging each yielded item with its
+ * source. Preserves arrival order across the two streams. Both iterators are
+ * exhausted before the merged iterator returns.
+ *
+ * Used by adapters to interleave the CLI's stdout (stream-json events) and
+ * stderr (live diagnostics surfaced as `stderr` events) into a single event
+ * stream while still letting each line carry its origin.
+ */
+export async function* mergeStdoutStderr(
+  stdout: AsyncIterable<string>,
+  stderr: AsyncIterable<string>,
+): AsyncIterable<{ src: 'stdout' | 'stderr'; line: string }> {
+  const stdoutIt = stdout[Symbol.asyncIterator]();
+  const stderrIt = stderr[Symbol.asyncIterator]();
+  type Pending = Promise<{
+    src: 'stdout' | 'stderr';
+    result: IteratorResult<string>;
+  }>;
+  let stdoutP: Pending | null = stdoutIt
+    .next()
+    .then((result) => ({ src: 'stdout' as const, result }));
+  let stderrP: Pending | null = stderrIt
+    .next()
+    .then((result) => ({ src: 'stderr' as const, result }));
+  while (stdoutP || stderrP) {
+    const racers: Pending[] = [];
+    if (stdoutP) racers.push(stdoutP);
+    if (stderrP) racers.push(stderrP);
+    const winner = await Promise.race(racers);
+    if (winner.src === 'stdout') {
+      if (winner.result.done) {
+        stdoutP = null;
+      } else {
+        yield { src: 'stdout', line: winner.result.value };
+        stdoutP = stdoutIt
+          .next()
+          .then((result) => ({ src: 'stdout' as const, result }));
+      }
+    } else {
+      if (winner.result.done) {
+        stderrP = null;
+      } else {
+        yield { src: 'stderr', line: winner.result.value };
+        stderrP = stderrIt
+          .next()
+          .then((result) => ({ src: 'stderr' as const, result }));
+      }
+    }
+  }
+}

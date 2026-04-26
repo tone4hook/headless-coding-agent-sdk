@@ -16,7 +16,8 @@ Legend: ✅ native support · ⚠️ best-effort · ❌ `FeatureNotSupportedErro
 | `permissionPolicy.mode` | ✅ → `--permission-mode` | ✅ → `--approval-mode` | `bypass`/`accept-edits`/`plan` mapped |
 | `permissionPolicy.allow` | ✅ `--allowed-tools` | ⚠️ via `--allowed-tools` | Gemini deprecated path |
 | `permissionPolicy.deny` | ✅ `--disallowed-tools` | ❌ no native deny-list | Silently ignored on gemini |
-| `extraEnv` | ✅ | ✅ | Merged into child env |
+| `extraEnv` | ✅ | ✅ | Merged into child env. Empty-string values are preserved as legitimate values (use `unsetEnv` to delete) |
+| `unsetEnv` | ✅ | ✅ | Names deleted from the spawn env *after* `extraEnv` is applied. Used to strip stale auth env vars and force OAuth/keychain fallback |
 | `onRawLine` | ✅ | ✅ | Called per stdout line |
 
 ## Claude-only optional extras
@@ -52,7 +53,7 @@ Legend: ✅ native support · ⚠️ best-effort · ❌ `FeatureNotSupportedErro
 | `signal` (AbortSignal) | ✅ | ✅ |
 | `outputSchema` | ✅ `--json-schema` | ⚠️ prompt injection |
 | `strictSchema: true` | ✅ (same as non-strict) | ❌ throws `FeatureNotSupportedError` |
-| `streamPartialMessages` | ✅ `--include-partial-messages` | n/a |
+| `streamPartialMessages` | ✅ `--include-partial-messages` — emits `{type:'message', role:'assistant', delta:true, text:<chunk>}` per `content_block_delta` text-delta, plus the existing final `delta:false` aggregate. Thinking deltas are not surfaced. | ⚠️ silently ignored |
 | `maxTurns` | ✅ `--max-turns` | n/a |
 
 ## Known gaps (MVP)
@@ -118,3 +119,4 @@ top-level fields, provider-narrowed `extra`, and raw `originalItem`.
 | `usage` | `result.usage` | `result.stats` |
 | `error` | `result` with `is_error:true` | `result` with `status:error` |
 | `done` | `result` (final) | `result` (final) |
+| `stderr` | every CLI stderr line, surfaced live before `done`; the same buffer is also attached to `CliExitError.message` on non-zero exit | every CLI stderr line, same semantics |

@@ -55,8 +55,47 @@ await thread.close();
 for await (const ev of thread.runStreamed('plan a migration')) {
   if (ev.type === 'message' && ev.role === 'assistant') process.stdout.write(ev.text ?? '');
   if (ev.type === 'tool_use') console.error(`[tool] ${ev.name}`, ev.args);
+  if (ev.type === 'stderr') console.error(`[stderr] ${ev.line}`);
 }
 ```
+
+### Token-by-token deltas (Claude)
+
+Pass `streamPartialMessages: true` to receive each text chunk as
+`{type:'message', role:'assistant', delta:true, text:<chunk>}`. The
+final aggregated message is still emitted with `delta:false`, so
+existing consumers that only read the final message keep working.
+
+```ts
+for await (const ev of thread.runStreamed('write a haiku', { streamPartialMessages: true })) {
+  if (ev.type === 'message' && ev.role === 'assistant' && ev.delta) {
+    process.stdout.write(ev.text ?? '');
+  }
+}
+```
+
+Gemini silently ignores the flag.
+
+### Auth: forcing OAuth / keychain
+
+Both CLIs prefer their OAuth/keychain credentials, but they fall back to
+env-var keys when present (e.g. `ANTHROPIC_API_KEY`). To force the
+CLI to use its keychain credentials regardless of inherited env, list
+the offenders in `unsetEnv`:
+
+```ts
+const coder = createCoder('claude', {
+  unsetEnv: [
+    'ANTHROPIC_API_KEY',
+    'ANTHROPIC_AUTH_TOKEN',
+    'CLAUDE_CODE_USE_BEDROCK',
+    'CLAUDE_CODE_USE_VERTEX',
+  ],
+});
+```
+
+Empty-string values in `extraEnv` are preserved as legitimate values
+rather than treated as deletes — `unsetEnv` is the explicit strip list.
 
 ### Custom tools (works on both adapters)
 
