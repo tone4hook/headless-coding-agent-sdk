@@ -3,7 +3,11 @@ import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { setupEphemeralGeminiHome } from '../src/adapters/gemini/home.js';
+import {
+  assertBridgeRegistered,
+  setupEphemeralGeminiHome,
+} from '../src/adapters/gemini/home.js';
+import { GeminiBridgeNotLoadedError } from '../src/errors.js';
 
 describe('setupEphemeralGeminiHome', () => {
   let fakeHome: string;
@@ -62,9 +66,13 @@ describe('setupEphemeralGeminiHome', () => {
         readFileSync(join(eph.home, '.gemini', 'settings.json'), 'utf-8'),
       );
       expect(merged.theme).toBe('Default');
+      // Pre-existing user entry is preserved untouched (trust not propagated).
       expect(merged.mcpServers.keepMe).toEqual({ httpUrl: 'http://keep/' });
+      // Our SDK-owned bridge is registered with trust:true so headless tool
+      // calls don't stall on Gemini's per-call confirmation prompt.
       expect(merged.mcpServers.sdk_bridge_test).toEqual({
         httpUrl: 'http://127.0.0.1:9999/mcp',
+        trust: true,
       });
     } finally {
       await eph.cleanup();
@@ -168,5 +176,61 @@ describe('setupEphemeralGeminiHome', () => {
     } finally {
       await eph.cleanup();
     }
+  });
+});
+
+describe('assertBridgeRegistered (smoke check)', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'hca-smoke-'));
+  });
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it('passes when settings.json has the bridge entry with matching httpUrl', async () => {
+    const path = join(dir, 'settings.json');
+    await writeFile(
+      path,
+      JSON.stringify({ mcpServers: { my_bridge: { httpUrl: 'http://x/' } } }),
+      'utf-8',
+    );
+    expect(() => assertBridgeRegistered(path, 'my_bridge', 'http://x/')).not.toThrow();
+  });
+
+  it('throws GeminiBridgeNotLoadedError when the bridge entry is missing', async () => {
+    const path = join(dir, 'settings.json');
+    await writeFile(
+      path,
+      JSON.stringify({ mcpServers: { other: { httpUrl: 'http://other/' } } }),
+      'utf-8',
+    );
+    expect(() =>
+      assertBridgeRegistered(path, 'my_bridge', 'http://x/'),
+    ).toThrowError(GeminiBridgeNotLoadedError);
+  });
+
+  it('throws GeminiBridgeNotLoadedError when httpUrl does not match', async () => {
+    const path = join(dir, 'settings.json');
+    await writeFile(
+      path,
+      JSON.stringify({
+        mcpServers: { my_bridge: { httpUrl: 'http://wrong/' } },
+      }),
+      'utf-8',
+    );
+    expect(() =>
+      assertBridgeRegistered(path, 'my_bridge', 'http://x/'),
+    ).toThrowError(GeminiBridgeNotLoadedError);
+  });
+
+  it('throws GeminiBridgeNotLoadedError when settings.json is unparseable', async () => {
+    const path = join(dir, 'settings.json');
+    await writeFile(path, 'not json', 'utf-8');
+    expect(() =>
+      assertBridgeRegistered(path, 'my_bridge', 'http://x/'),
+    ).toThrowError(GeminiBridgeNotLoadedError);
   });
 });

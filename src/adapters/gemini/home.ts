@@ -21,6 +21,8 @@ import { mkdtemp, mkdir, rm, symlink, writeFile } from 'node:fs/promises';
 import { homedir, tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+import { GeminiBridgeNotLoadedError } from '../../errors.js';
+
 /** Files/dirs under ~/.gemini that we symlink into the ephemeral home. */
 const PASSTHROUGH_ENTRIES = [
   'oauth_creds.json',
@@ -67,14 +69,20 @@ export async function setupEphemeralGeminiHome(
     ...((userSettings.mcpServers as Record<string, unknown> | undefined) ?? {}),
     [input.mcpServerName]: {
       httpUrl: input.bridgeUrl,
+      // The SDK owns this localhost bridge; mark it trusted so headless
+      // tool calls don't stall on Gemini's per-call confirmation prompt.
+      trust: true,
     },
   };
   const merged: Record<string, unknown> = { ...userSettings, mcpServers: mergedMcp };
-  await writeFile(
-    join(geminiDir, 'settings.json'),
-    JSON.stringify(merged, null, 2),
-    'utf-8',
-  );
+  const settingsPath = join(geminiDir, 'settings.json');
+  await writeFile(settingsPath, JSON.stringify(merged, null, 2), 'utf-8');
+
+  // Defensive read-back: confirm our bridge entry survived the merge and the
+  // file is parseable. Catches code-level regressions in the merge logic
+  // before we hand off to gemini, where a missing bridge would silently
+  // remove every SDK custom tool from the headless run.
+  assertBridgeRegistered(settingsPath, input.mcpServerName, input.bridgeUrl);
 
   // Symlink pass-through entries from the real .gemini into the ephemeral one.
   for (const entry of PASSTHROUGH_ENTRIES) {
@@ -103,6 +111,41 @@ export async function setupEphemeralGeminiHome(
       await rm(root, { recursive: true, force: true });
     },
   };
+}
+
+/**
+ * Verifies that a `settings.json` at `settingsPath` registers an MCP server
+ * named `mcpServerName` with `httpUrl === bridgeUrl`. Throws
+ * `GeminiBridgeNotLoadedError` otherwise. Exported for direct unit testing
+ * of the defensive smoke-check path against synthetic settings files.
+ */
+export function assertBridgeRegistered(
+  settingsPath: string,
+  mcpServerName: string,
+  bridgeUrl: string,
+): void {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(settingsPath, 'utf-8'));
+  } catch (err) {
+    throw new GeminiBridgeNotLoadedError(
+      mcpServerName,
+      `ephemeral settings.json failed to parse (${(err as Error).message})`,
+    );
+  }
+  const servers =
+    parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? ((parsed as Record<string, unknown>).mcpServers as
+          | Record<string, unknown>
+          | undefined)
+      : undefined;
+  const entry = servers?.[mcpServerName] as Record<string, unknown> | undefined;
+  if (!entry || entry.httpUrl !== bridgeUrl) {
+    throw new GeminiBridgeNotLoadedError(
+      mcpServerName,
+      'bridge entry missing from merged settings.json',
+    );
+  }
 }
 
 function readUserSettings(realGeminiDir: string): Record<string, unknown> {

@@ -65,6 +65,43 @@ Legend: ✅ native support · ⚠️ best-effort · ❌ `FeatureNotSupportedErro
 - **Long-lived bidirectional mode** is a future extension (Claude
   `--input-format stream-json`, Gemini `--acp`).
 
+## CLI version notes (doc drift vs. installed binary)
+
+A few SDK choices differ from the public docs of each CLI but match
+the actually-shipped binaries we target. Recorded here so reviewers can
+verify the divergence is intentional.
+
+- **Gemini `--output-format stream-json`** is supported on the installed
+  Gemini binary (`gemini --help` lists choices `text | json | stream-json`
+  on `≥ 0.38.x`). The public `docs/cli/headless.html` page only lists
+  `text` and `json`; the SDK depends on the binary's actual surface and
+  uses `stream-json` to deliver the unified event stream.
+- **Gemini `--yolo` cannot be combined with `--approval-mode`.** The
+  installed binary errors out at startup with
+  *"Cannot use both --yolo (-y) and --approval-mode together. Use
+  --approval-mode=yolo instead."* — so the SDK normalizes
+  `yolo: true` into `--approval-mode yolo` and never emits `-y`. A real
+  conflict (e.g. `yolo: true` plus `approvalMode: 'auto_edit'`) raises
+  `FeatureNotSupportedError` at the SDK boundary instead of at process
+  spawn.
+- **Gemini MCP bridge is registered with `trust: true`.** Per
+  `tools/mcp-server.html`, `trust` defaults to `false` and means tool
+  calls require user confirmation. The SDK-owned localhost bridge is by
+  construction trusted — without `trust: true`, custom tools could stall
+  on confirmation in headless mode.
+- **Gemini `GEMINI_CLI_HOME` is not in the public env-var list** but is
+  honored by the installed binary's `homedir()` lookup. The SDK relies
+  on this for non-mutating per-thread config injection. A defensive
+  smoke-check (see `assertBridgeRegistered` in `src/adapters/gemini/home.ts`)
+  raises `GeminiBridgeNotLoadedError` if the merged settings file ever
+  fails to register the bridge, so a future Gemini change gets caught
+  loudly instead of silently disabling custom tools.
+- **Claude `--allowed-tools` / `--disallowed-tools` (kebab-case).** The
+  installed `claude --help` documents both `--allowedTools, --allowed-tools`
+  and `--disallowedTools, --disallowed-tools` as aliases of the same
+  flag. The SDK uses the kebab form intentionally; either casing is
+  accepted.
+
 ## Event translation reference
 
 See `src/adapters/claude/translate.ts` and `src/adapters/gemini/translate.ts`.

@@ -24,6 +24,7 @@ export {
   CliVersionError,
   FeatureNotSupportedError,
   CliExitError,
+  GeminiBridgeNotLoadedError,
 } from './errors.js';
 
 export type {

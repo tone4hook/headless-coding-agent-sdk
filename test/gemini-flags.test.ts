@@ -8,22 +8,70 @@ describe('buildGeminiArgv', () => {
     expect(argv.slice(0, 4)).toEqual(['-p', 'hi', '--output-format', 'stream-json']);
   });
 
-  it('maps model, yolo, sandbox, approvalMode', () => {
+  it('maps model and sandbox; approvalMode flows through when yolo is unset', () => {
     const argv = buildGeminiArgv({
       prompt: 'hi',
       opts: {
         model: 'gemini-flash',
-        yolo: true,
         sandbox: true,
         approvalMode: 'auto_edit',
       },
     });
     expect(argv).toContain('-m');
     expect(argv).toContain('gemini-flash');
-    expect(argv).toContain('-y');
     expect(argv).toContain('-s');
     expect(argv).toContain('--approval-mode');
     expect(argv).toContain('auto_edit');
+    expect(argv).not.toContain('-y');
+  });
+
+  it('normalizes yolo:true to --approval-mode yolo (no -y)', () => {
+    const argv = buildGeminiArgv({ prompt: 'hi', opts: { yolo: true } });
+    expect(argv).not.toContain('-y');
+    const idx = argv.indexOf('--approval-mode');
+    expect(idx).toBeGreaterThan(-1);
+    expect(argv[idx + 1]).toBe('yolo');
+    // Single --approval-mode entry only.
+    expect(argv.filter((a) => a === '--approval-mode')).toHaveLength(1);
+  });
+
+  it('coalesces yolo:true + approvalMode:"yolo" to a single --approval-mode yolo', () => {
+    const argv = buildGeminiArgv({
+      prompt: 'hi',
+      opts: { yolo: true, approvalMode: 'yolo' },
+    });
+    expect(argv.filter((a) => a === '--approval-mode')).toHaveLength(1);
+    expect(argv.filter((a) => a === 'yolo')).toHaveLength(1);
+    expect(argv).not.toContain('-y');
+  });
+
+  it('coalesces yolo:true + permissionPolicy.mode:"bypass" without throwing', () => {
+    const argv = buildGeminiArgv({
+      prompt: 'hi',
+      opts: { yolo: true, permissionPolicy: { mode: 'bypass' } },
+    });
+    expect(argv.filter((a) => a === '--approval-mode')).toHaveLength(1);
+    const idx = argv.indexOf('--approval-mode');
+    expect(argv[idx + 1]).toBe('yolo');
+    expect(argv).not.toContain('-y');
+  });
+
+  it('throws when yolo:true is combined with a non-yolo approvalMode', () => {
+    expect(() =>
+      buildGeminiArgv({
+        prompt: 'hi',
+        opts: { yolo: true, approvalMode: 'auto_edit' },
+      }),
+    ).toThrowError(FeatureNotSupportedError);
+  });
+
+  it('throws when yolo:true is combined with a non-yolo permissionPolicy mode', () => {
+    expect(() =>
+      buildGeminiArgv({
+        prompt: 'hi',
+        opts: { yolo: true, permissionPolicy: { mode: 'plan' } },
+      }),
+    ).toThrowError(FeatureNotSupportedError);
   });
 
   it('repeats --policy for each policy file', () => {

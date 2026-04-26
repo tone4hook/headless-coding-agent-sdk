@@ -60,6 +60,27 @@ export class FeatureNotSupportedError extends CoderError {
   }
 }
 
+/**
+ * Thrown when the SDK-owned MCP bridge is configured but cannot be confirmed
+ * to be loaded by the Gemini CLI (e.g. a future Gemini build dropping the
+ * undocumented `GEMINI_CLI_HOME` env override that the adapter relies on for
+ * non-mutating settings injection). Surfaces fast instead of letting custom
+ * tools silently disappear.
+ */
+export class GeminiBridgeNotLoadedError extends CoderError {
+  readonly mcpServerName: string;
+
+  constructor(mcpServerName: string, hint?: string) {
+    super(
+      'GEMINI_BRIDGE_NOT_LOADED',
+      `Gemini MCP bridge "${mcpServerName}" was not detected after setup${hint ? `: ${hint}` : ''}`,
+      'gemini',
+    );
+    this.name = 'GeminiBridgeNotLoadedError';
+    this.mcpServerName = mcpServerName;
+  }
+}
+
 /** Thrown when the CLI subprocess exits with a non-zero code. */
 export class CliExitError extends CoderError {
   readonly exitCode: number | null;
