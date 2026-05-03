@@ -25,6 +25,10 @@
     "./gemini": {
       "types": "./dist/adapters/gemini/index.d.ts",
       "import": "./dist/adapters/gemini/index.js"
+    },
+    "./codex": {
+      "types": "./dist/adapters/codex/index.d.ts",
+      "import": "./dist/adapters/codex/index.js"
     }
   },
   "files": [
@@ -41,7 +45,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "tree-kill": "^1.2.2"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

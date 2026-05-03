@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
   createCoder,
   createClaudeCoder,
+  createCodexCoder,
   createGeminiCoder,
 } from '../src/index.js';
 import type {
@@ -14,10 +15,13 @@ describe('createCoder', () => {
   it('returns an adapter-typed HeadlessCoder for each provider literal', () => {
     const claude = createCoder('claude');
     const gemini = createCoder('gemini');
+    const codex = createCoder('codex');
     expect(claude.provider).toBe('claude');
     expect(gemini.provider).toBe('gemini');
+    expect(codex.provider).toBe('codex');
     expectTypeOf(claude).toEqualTypeOf<HeadlessCoder<'claude'>>();
     expectTypeOf(gemini).toEqualTypeOf<HeadlessCoder<'gemini'>>();
+    expectTypeOf(codex).toEqualTypeOf<HeadlessCoder<'codex'>>();
   });
 
   it('narrows provider literal so ThreadHandle.fork is claude-only-callable at compile time', () => {
@@ -64,5 +68,8 @@ describe('createCoder', () => {
     const c = createGeminiCoder();
     const d = createCoder('gemini');
     expect(c.provider).toBe(d.provider);
+    const e = createCodexCoder();
+    const f = createCoder('codex');
+    expect(e.provider).toBe(f.provider);
   });
 });

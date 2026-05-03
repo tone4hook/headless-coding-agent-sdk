@@ -35,6 +35,7 @@ async function registerGeminiMcp(bridge: HttpMcpBridge): Promise<McpHandshake> {
 export const geminiSpec: AdapterSpec<'gemini'> = {
   provider: 'gemini',
   bin: 'gemini',
+  promptTransport: 'stdin',
   buildArgv: (ctx) =>
     buildGeminiArgv({
       prompt: ctx.prompt,

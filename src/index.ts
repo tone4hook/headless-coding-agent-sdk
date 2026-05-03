@@ -8,6 +8,7 @@
 export { createCoder } from './factory.js';
 export { createClaudeCoder } from './adapters/claude/index.js';
 export { createGeminiCoder } from './adapters/gemini/index.js';
+export { createCodexCoder } from './adapters/codex/index.js';
 
 export {
   tool,
@@ -17,6 +18,7 @@ export {
 export type { ToolRegistry } from './tools/define.js';
 
 export { HttpMcpBridge } from './tools/bridge.js';
+export { shutdownSpawnedClis } from './transport/spawn.js';
 
 export {
   CoderError,

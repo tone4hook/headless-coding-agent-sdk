@@ -3,15 +3,15 @@ import { buildClaudeArgv } from '../src/adapters/claude/flags.js';
 import { FeatureNotSupportedError } from '../src/errors.js';
 
 describe('buildClaudeArgv', () => {
-  it('starts every invocation with -p <prompt> --output-format stream-json --verbose', () => {
+  it('starts every invocation with -p --output-format stream-json --verbose and leaves prompt for stdin', () => {
     const argv = buildClaudeArgv({ prompt: 'hi', opts: {} });
-    expect(argv.slice(0, 5)).toEqual([
+    expect(argv.slice(0, 4)).toEqual([
       '-p',
-      'hi',
       '--output-format',
       'stream-json',
       '--verbose',
     ]);
+    expect(argv).not.toContain('hi');
   });
 
   it('maps model / allowedTools / system prompts / budget', () => {

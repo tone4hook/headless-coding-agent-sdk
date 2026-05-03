@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { spawnCli, composeEnv } from '../src/transport/spawn.js';
+import { spawnCli, composeEnv, shutdownSpawnedClis } from '../src/transport/spawn.js';
 import { chunkedToLines, mergeStdoutStderr } from '../src/transport/lines.js';
 import { Readable } from 'node:stream';
 
@@ -148,6 +148,16 @@ describe('spawnCli', () => {
     setTimeout(() => cli.kill(), 50);
     const { signal } = await cli.done;
     expect(signal).toBe('SIGTERM');
+  });
+
+  it('shutdownSpawnedClis interrupts all active children', async () => {
+    const cli = spawnCli({
+      bin: process.execPath,
+      args: ['-e', 'setInterval(()=>{}, 1000);'],
+    });
+    await shutdownSpawnedClis('test');
+    const { exitCode, signal } = await cli.done;
+    expect(exitCode !== 0 || signal !== null).toBe(true);
   });
 });
 

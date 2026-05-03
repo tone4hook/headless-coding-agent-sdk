@@ -51,6 +51,7 @@ async function registerClaudeMcp(bridge: HttpMcpBridge): Promise<McpHandshake> {
 export const claudeSpec: AdapterSpec<'claude'> = {
   provider: 'claude',
   bin: 'claude',
+  promptTransport: 'stdin',
   buildArgv: (ctx) =>
     buildClaudeArgv({
       prompt: ctx.prompt,

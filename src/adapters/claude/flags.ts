@@ -47,7 +47,7 @@ const GEMINI_ONLY_FIELDS = [
 ] as const;
 
 export function buildClaudeArgv(input: BuildClaudeArgvInput): string[] {
-  const { opts, prompt, resumeId, continueLatest, mcpConfigPath } = input;
+  const { opts, resumeId, continueLatest, mcpConfigPath } = input;
 
   // Reject Gemini-only fields up front.
   for (const field of GEMINI_ONLY_FIELDS) {
@@ -60,13 +60,7 @@ export function buildClaudeArgv(input: BuildClaudeArgvInput): string[] {
     }
   }
 
-  const argv: string[] = [
-    '-p',
-    prompt,
-    '--output-format',
-    'stream-json',
-    '--verbose',
-  ];
+  const argv: string[] = ['-p', '--output-format', 'stream-json', '--verbose'];
 
   if (opts.model) argv.push('--model', opts.model);
 
@@ -120,4 +114,3 @@ export function buildClaudeArgv(input: BuildClaudeArgvInput): string[] {
 
   return argv;
 }
-

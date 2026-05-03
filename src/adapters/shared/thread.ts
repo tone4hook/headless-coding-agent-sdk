@@ -25,7 +25,7 @@ import { HttpMcpBridge } from '../../tools/bridge.js';
 import { createToolRegistry } from '../../tools/define.js';
 import { mergeStdoutStderr } from '../../transport/lines.js';
 import { composeEnv, spawnCli, type SpawnedCli } from '../../transport/spawn.js';
-import type { AdapterSpec, McpHandshake } from './spec.js';
+import type { AdapterSpec, McpHandshake, PreparedRun } from './spec.js';
 
 export interface GenericThreadInit {
   id?: string;
@@ -45,6 +45,7 @@ export class GenericThread<P extends Provider> implements ThreadHandle<P> {
   private active?: SpawnedCli;
   private bridge?: HttpMcpBridge;
   private mcp?: McpHandshake;
+  private prepared?: PreparedRun;
 
   constructor(
     private readonly spec: AdapterSpec<P>,
@@ -130,12 +131,19 @@ export class GenericThread<P extends Provider> implements ThreadHandle<P> {
       if (this.mcp.env) Object.assign(env, this.mcp.env);
     }
 
-    const argv = this.spec.buildArgv({
+    const buildCtx = {
       prompt,
       opts: effectiveOpts,
       resumeId: this.id,
       resumeLatest: this.resumeLatest && !this.id,
-    });
+    };
+    this.prepared = this.spec.prepareRun
+      ? await this.spec.prepareRun(buildCtx)
+      : {
+          argv: this.spec.buildArgv(buildCtx),
+          stdin: this.spec.promptTransport === 'stdin' ? prompt : undefined,
+        };
+    const argv = [...this.prepared.argv];
     if (this.mcp?.argv) argv.push(...this.mcp.argv);
 
     this.active = spawnCli({
@@ -144,6 +152,7 @@ export class GenericThread<P extends Provider> implements ThreadHandle<P> {
       env,
       cwd: effectiveOpts.workingDirectory,
       signal: runOpts?.signal,
+      stdin: this.prepared.stdin,
     });
 
     const stderrChunks: string[] = [];
@@ -218,6 +227,10 @@ export class GenericThread<P extends Provider> implements ThreadHandle<P> {
       await this.mcp.cleanup().catch(() => undefined);
       this.mcp = undefined;
     }
+    if (this.prepared?.cleanup) {
+      await this.prepared.cleanup().catch(() => undefined);
+    }
+    this.prepared = undefined;
     this.active = undefined;
   }
 }

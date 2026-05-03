@@ -8,7 +8,7 @@
  * adapter(s) that honor it.
  */
 
-export type Provider = 'claude' | 'gemini';
+export type Provider = 'claude' | 'gemini' | 'codex';
 
 export type PromptInput =
   | string
@@ -189,6 +189,26 @@ export interface SharedStartOpts {
   includeDirectories?: string[];
   /** @adapter gemini — maps to `--allowed-mcp-server-names`. */
   allowedMcpServerNames?: string[];
+
+  // --- Codex-only extras ---
+  /** @adapter codex — maps to `-c model_reasoning_effort="<value>"`. */
+  codexReasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+  /** @adapter codex — maps to `--disable plugins`. */
+  codexDisablePlugins?: boolean;
+  /** @adapter codex — maps to `--sandbox`. */
+  codexSandbox?: 'read-only' | 'workspace-write' | 'danger-full-access';
+  /** @adapter codex — maps to `-c sandbox_workspace_write.network_access=<bool>`. */
+  codexNetworkAccess?: boolean;
+  /** @adapter codex — maps to `--search`. */
+  codexSearch?: boolean;
+  /** @adapter codex — maps to `--ephemeral`. */
+  codexEphemeral?: boolean;
+  /** @adapter codex — maps to `--ignore-user-config`. */
+  codexIgnoreUserConfig?: boolean;
+  /** @adapter codex — maps to `--ignore-rules`. */
+  codexIgnoreRules?: boolean;
+  /** @adapter codex — maps to `--dangerously-bypass-approvals-and-sandbox`. */
+  codexDangerouslyBypassApprovalsAndSandbox?: boolean;
 }
 
 export interface RunOpts {
@@ -326,6 +346,37 @@ export interface ProviderExtras {
       cached?: number;
       toolCalls?: number;
       models?: Record<string, UsageStats>;
+    };
+    done: {
+      terminalReason?: string;
+    };
+    error: Record<string, never>;
+    permission: Record<string, never>;
+    file_change: Record<string, never>;
+    plan_update: Record<string, never>;
+    cancelled: Record<string, never>;
+    stderr: Record<string, never>;
+  };
+  codex: {
+    init: {
+      sessionId?: string;
+      cwd?: string;
+    };
+    message: {
+      sessionId?: string;
+    };
+    tool_use: {
+      sessionId?: string;
+    };
+    tool_result: {
+      sessionId?: string;
+      status?: string;
+    };
+    progress: {
+      label?: string;
+    };
+    usage: {
+      raw?: unknown;
     };
     done: {
       terminalReason?: string;

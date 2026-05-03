@@ -9,6 +9,7 @@
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { chunkedToLines } from './lines.js';
+import { delay, killProcessTree, type KillSignal } from './processTree.js';
 
 export interface SpawnCliOptions {
   bin: string;
@@ -29,6 +30,20 @@ export interface SpawnedCli {
   interrupt(): void;
   /** Force SIGTERM. */
   kill(): void;
+}
+
+const activeClis = new Set<{
+  pid: number | undefined;
+  done: Promise<{ exitCode: number | null; signal: NodeJS.Signals | null }>;
+  interrupt: () => void;
+  kill: () => void;
+}>();
+
+async function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T | undefined> {
+  return Promise.race([
+    promise.then((value) => value),
+    delay(ms).then(() => undefined),
+  ]);
 }
 
 /**
@@ -81,15 +96,15 @@ export function spawnCli(opts: SpawnCliOptions): SpawnedCli {
 
   let interruptsSent = 0;
   let childExited = false;
+  const sendTreeSignal = (sig: KillSignal) => {
+    if (childExited || child.exitCode !== null) return;
+    void killProcessTree(child.pid, { signal: sig });
+  };
   const sendInterrupt = () => {
     if (childExited || child.exitCode !== null) return;
     interruptsSent += 1;
-    const sig: NodeJS.Signals = interruptsSent === 1 ? 'SIGINT' : 'SIGTERM';
-    try {
-      child.kill(sig);
-    } catch {
-      /* ignore */
-    }
+    const sig: KillSignal = interruptsSent === 1 ? 'SIGINT' : 'SIGTERM';
+    sendTreeSignal(sig);
   };
 
   const abortListener = () => sendInterrupt();
@@ -110,6 +125,19 @@ export function spawnCli(opts: SpawnCliOptions): SpawnedCli {
     },
   );
 
+  const tracked = {
+    get pid() {
+      return child.pid;
+    },
+    done,
+    interrupt: sendInterrupt,
+    kill: () => {
+      sendTreeSignal('SIGTERM');
+    },
+  };
+  activeClis.add(tracked);
+  done.finally(() => activeClis.delete(tracked)).catch(() => undefined);
+
   return {
     get pid() {
       return child.pid;
@@ -119,11 +147,20 @@ export function spawnCli(opts: SpawnCliOptions): SpawnedCli {
     done,
     interrupt: sendInterrupt,
     kill: () => {
-      try {
-        child.kill('SIGTERM');
-      } catch {
-        /* ignore */
-      }
+      sendTreeSignal('SIGTERM');
     },
   };
+}
+
+export async function shutdownSpawnedClis(_reason?: string): Promise<void> {
+  const clis = [...activeClis];
+  for (const cli of clis) cli.interrupt();
+  await Promise.all(clis.map((cli) => withDeadline(cli.done, 5000)));
+
+  const stillRunning = clis.filter((cli) => activeClis.has(cli));
+  for (const cli of stillRunning) cli.kill();
+  await Promise.all(stillRunning.map((cli) => withDeadline(cli.done, 2000)));
+
+  const stubborn = clis.filter((cli) => activeClis.has(cli));
+  await Promise.all(stubborn.map((cli) => killProcessTree(cli.pid, { signal: 'SIGKILL' })));
 }

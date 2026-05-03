@@ -3,9 +3,10 @@ import { buildGeminiArgv } from '../src/adapters/gemini/flags.js';
 import { FeatureNotSupportedError } from '../src/errors.js';
 
 describe('buildGeminiArgv', () => {
-  it('starts every invocation with -p <prompt> --output-format stream-json', () => {
+  it('starts every invocation with an empty -p marker and leaves prompt for stdin', () => {
     const argv = buildGeminiArgv({ prompt: 'hi', opts: {} });
-    expect(argv.slice(0, 4)).toEqual(['-p', 'hi', '--output-format', 'stream-json']);
+    expect(argv.slice(0, 4)).toEqual(['-p', '', '--output-format', 'stream-json']);
+    expect(argv).not.toContain('hi');
   });
 
   it('maps model and sandbox; approvalMode flows through when yolo is unset', () => {

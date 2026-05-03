@@ -43,7 +43,7 @@ const CLAUDE_ONLY_FIELDS = [
 ] as const;
 
 export function buildGeminiArgv(input: BuildGeminiArgvInput): string[] {
-  const { opts, prompt, resumeId, resumeLatest } = input;
+  const { opts, resumeId, resumeLatest } = input;
 
   for (const field of CLAUDE_ONLY_FIELDS) {
     if ((opts as Record<string, unknown>)[field] !== undefined) {
@@ -63,7 +63,7 @@ export function buildGeminiArgv(input: BuildGeminiArgvInput): string[] {
     );
   }
 
-  const argv: string[] = ['-p', prompt, '--output-format', 'stream-json'];
+  const argv: string[] = ['-p', '', '--output-format', 'stream-json'];
 
   if (opts.model) argv.push('-m', opts.model);
 
@@ -132,4 +132,3 @@ export function buildGeminiArgv(input: BuildGeminiArgvInput): string[] {
 
   return argv;
 }
-

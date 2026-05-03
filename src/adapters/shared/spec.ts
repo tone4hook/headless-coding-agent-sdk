@@ -38,12 +38,30 @@ export interface BuildArgvCtx {
   resumeLatest: boolean;
 }
 
+export interface PreparedRun {
+  argv: string[];
+  stdin?: string;
+  cleanup?: () => Promise<void>;
+}
+
 export interface AdapterSpec<P extends Provider> {
   readonly provider: P;
   readonly bin: string;
 
   /** Build argv from the unified ctx. The shared module appends mcp.argv after this. */
   buildArgv(ctx: BuildArgvCtx): string[];
+
+  /**
+   * Prompt transport mode. Stdin keeps long prompts out of argv and avoids
+   * shell-length cliffs. Defaults to `argv` for older adapters.
+   */
+  promptTransport?: 'argv' | 'stdin';
+
+  /**
+   * Optional async preparation for adapters that need temp files or other
+   * per-run resources before spawn.
+   */
+  prepareRun?(ctx: BuildArgvCtx): Promise<PreparedRun>;
 
   /** Translate one raw stdout line into zero or more events. */
   translateLine(line: string): CoderStreamEvent<P>[];
