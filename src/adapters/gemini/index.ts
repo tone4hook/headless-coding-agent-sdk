@@ -2,62 +2,16 @@
  * Gemini adapter — subprocess-based coder for the `gemini` CLI.
  */
 
-import { CliExitError, FeatureNotSupportedError } from '../../errors.js';
 import type {
-  CoderStreamEvent,
   HeadlessCoder,
-  PromptInput,
-  RunOpts,
-  RunResult,
   SharedStartOpts,
-  ThreadHandle,
 } from '../../types.js';
-import { HttpMcpBridge } from '../../tools/bridge.js';
-import { createToolRegistry } from '../../tools/define.js';
-import { composeEnv, spawnCli, type SpawnedCli } from '../../transport/spawn.js';
-import { mergeStdoutStderr } from '../../transport/lines.js';
+import type { HttpMcpBridge } from '../../tools/bridge.js';
+import { createCoderFromSpec } from '../shared/thread.js';
+import type { AdapterSpec, McpHandshake } from '../shared/spec.js';
 import { buildGeminiArgv } from './flags.js';
-import { setupEphemeralGeminiHome, type EphemeralHome } from './home.js';
+import { setupEphemeralGeminiHome } from './home.js';
 import { translateGeminiLine } from './translate.js';
-
-export function createGeminiCoder(
-  defaults?: SharedStartOpts,
-): HeadlessCoder<'gemini'> {
-  return new GeminiCoder(defaults);
-}
-
-class GeminiCoder implements HeadlessCoder<'gemini'> {
-  readonly provider = 'gemini' as const;
-  constructor(private readonly defaults?: SharedStartOpts) {}
-
-  async startThread(opts?: SharedStartOpts): Promise<ThreadHandle<'gemini'>> {
-    return new GeminiThread({ ...this.defaults, ...opts });
-  }
-
-  async resumeThread(
-    id: string,
-    opts?: SharedStartOpts,
-  ): Promise<ThreadHandle<'gemini'>> {
-    const t = new GeminiThread({ ...this.defaults, ...opts });
-    t.id = id;
-    return t;
-  }
-
-  async resumeLatest(opts?: SharedStartOpts): Promise<ThreadHandle<'gemini'>> {
-    const t = new GeminiThread({ ...this.defaults, ...opts });
-    t._resumeLatest = true;
-    return t;
-  }
-
-  async close(thread: ThreadHandle<'gemini'>): Promise<void> {
-    await thread.close();
-  }
-}
-
-function promptToString(input: PromptInput): string {
-  if (typeof input === 'string') return input;
-  return input.map((m) => `[${m.role}] ${m.content}`).join('\n');
-}
 
 function schemaPreamble(schema: Record<string, unknown>): string {
   return [
@@ -67,165 +21,39 @@ function schemaPreamble(schema: Record<string, unknown>): string {
   ].join('\n');
 }
 
-class GeminiThread implements ThreadHandle<'gemini'> {
-  readonly provider = 'gemini' as const;
-  id?: string;
-  /** @internal */ _resumeLatest = false;
-  private active?: SpawnedCli;
-  private bridge?: HttpMcpBridge;
-  private home?: EphemeralHome;
+async function registerGeminiMcp(bridge: HttpMcpBridge): Promise<McpHandshake> {
+  const home = await setupEphemeralGeminiHome({
+    bridgeUrl: bridge.url,
+    mcpServerName: bridge.serverName,
+  });
+  return {
+    env: home.env,
+    cleanup: () => home.cleanup().catch(() => undefined) as Promise<void>,
+  };
+}
 
-  constructor(private readonly opts: SharedStartOpts) {}
+export const geminiSpec: AdapterSpec<'gemini'> = {
+  provider: 'gemini',
+  bin: 'gemini',
+  buildArgv: (ctx) =>
+    buildGeminiArgv({
+      prompt: ctx.prompt,
+      opts: ctx.opts,
+      resumeId: ctx.resumeId,
+      resumeLatest: ctx.resumeLatest,
+    }),
+  translateLine: translateGeminiLine,
+  registerMcp: registerGeminiMcp,
+  transformPrompt: (prompt, opts) =>
+    opts.outputSchema
+      ? `${schemaPreamble(opts.outputSchema)}\n\n${prompt}`
+      : prompt,
+  shouldAccumulateText: (ev) =>
+    ev.type === 'message' && ev.role === 'assistant',
+};
 
-  async run(input: PromptInput, runOpts?: RunOpts): Promise<RunResult<'gemini'>> {
-    const events: CoderStreamEvent<'gemini'>[] = [];
-    let text: string | undefined;
-    let jsonResult: unknown;
-    let usage: RunResult<'gemini'>['usage'];
-    let error: RunResult<'gemini'>['error'];
-    let terminalReason: string | undefined;
-
-    for await (const ev of this.runStreamed(input, runOpts)) {
-      events.push(ev);
-      if (ev.type === 'message' && ev.role === 'assistant' && ev.text) {
-        text = (text ?? '') + ev.text;
-      }
-      if (ev.type === 'usage') usage = ev.stats;
-      if (ev.type === 'error') error = { code: ev.code, message: ev.message };
-      if (ev.type === 'done') terminalReason = ev.extra?.terminalReason;
-    }
-
-    if (runOpts?.outputSchema && text !== undefined) {
-      try {
-        jsonResult = JSON.parse(text.trim());
-      } catch {
-        /* leave json undefined */
-      }
-    }
-
-    return {
-      provider: 'gemini',
-      threadId: this.id,
-      text,
-      json: jsonResult,
-      usage,
-      events,
-      terminalReason,
-      error,
-    };
-  }
-
-  async *runStreamed(
-    input: PromptInput,
-    runOpts?: RunOpts,
-  ): AsyncIterable<CoderStreamEvent<'gemini'>> {
-    const effectiveOpts: SharedStartOpts & RunOpts = {
-      ...this.opts,
-      ...runOpts,
-    };
-
-    // Best-effort structured output on Gemini: inject the schema into the prompt.
-    let prompt = promptToString(input);
-    if (effectiveOpts.outputSchema) {
-      prompt = `${schemaPreamble(effectiveOpts.outputSchema)}\n\n${prompt}`;
-    }
-
-    // Custom tools: set up MCP bridge + ephemeral GEMINI_CLI_HOME.
-    const env: NodeJS.ProcessEnv = composeEnv(
-      process.env,
-      effectiveOpts.extraEnv,
-      effectiveOpts.unsetEnv,
-    );
-    if (effectiveOpts.tools && effectiveOpts.tools.length > 0) {
-      const registry = createToolRegistry(effectiveOpts.tools);
-      this.bridge = new HttpMcpBridge({ registry });
-      await this.bridge.start();
-      this.home = await setupEphemeralGeminiHome({
-        bridgeUrl: this.bridge.url,
-        mcpServerName: this.bridge.serverName,
-      });
-      Object.assign(env, this.home.env);
-    }
-
-    const argv = buildGeminiArgv({
-      prompt,
-      opts: effectiveOpts,
-      resumeId: this.id,
-      resumeLatest: this._resumeLatest && !this.id,
-    });
-
-    this.active = spawnCli({
-      bin: 'gemini',
-      args: argv,
-      env,
-      cwd: effectiveOpts.workingDirectory,
-      signal: runOpts?.signal,
-    });
-
-    const stderrChunks: string[] = [];
-
-    try {
-      for await (const item of mergeStdoutStderr(
-        this.active.lines,
-        this.active.stderr,
-      )) {
-        if (item.src === 'stderr') {
-          stderrChunks.push(item.line);
-          yield {
-            provider: 'gemini',
-            type: 'stderr',
-            line: item.line,
-            ts: Date.now(),
-          };
-          continue;
-        }
-        effectiveOpts.onRawLine?.(item.line);
-        for (const ev of translateGeminiLine(item.line)) {
-          if (!this.id && ev.type === 'init' && ev.threadId) {
-            this.id = ev.threadId;
-          }
-          yield ev;
-        }
-      }
-    } finally {
-      const { exitCode, signal } = await this.active.done;
-      await this.cleanup();
-      if (exitCode !== 0 && signal === null) {
-        throw new CliExitError('gemini', exitCode, signal, stderrChunks.join('\n'));
-      }
-    }
-  }
-
-  async interrupt(_reason?: string): Promise<void> {
-    this.active?.interrupt();
-  }
-
-  async close(): Promise<void> {
-    const active = this.active;
-    active?.kill();
-    if (active) {
-      await active.done.catch(() => undefined);
-    }
-    await this.cleanup();
-  }
-
-  async fork(): Promise<ThreadHandle<'gemini'>> {
-    throw new FeatureNotSupportedError(
-      'gemini',
-      'fork',
-      'Gemini CLI has no --fork-session equivalent. Use resumeLatest or resumeThread(id) for a new branch.',
-    );
-  }
-
-  private async cleanup(): Promise<void> {
-    if (this.bridge) {
-      await this.bridge.close();
-      this.bridge = undefined;
-    }
-    if (this.home) {
-      await this.home.cleanup().catch(() => undefined);
-      this.home = undefined;
-    }
-    this.active = undefined;
-  }
+export function createGeminiCoder(
+  defaults?: SharedStartOpts,
+): HeadlessCoder<'gemini'> {
+  return createCoderFromSpec(geminiSpec, defaults);
 }

@@ -26,6 +26,7 @@ export {
   CliExitError,
   GeminiBridgeNotLoadedError,
 } from './errors.js';
+export type { ErrorCode } from './errors.js';
 
 export type {
   Provider,

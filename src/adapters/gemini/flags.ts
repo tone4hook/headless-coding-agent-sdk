@@ -6,7 +6,22 @@
  */
 
 import { FeatureNotSupportedError } from '../../errors.js';
-import type { PermissionPolicy, RunOpts, SharedStartOpts } from '../../types.js';
+import type { RunOpts, SharedStartOpts } from '../../types.js';
+import {
+  applyPermissionPolicy,
+  type ProviderPolicyTranslation,
+} from '../shared/policy.js';
+
+const GEMINI_POLICY_TABLE: ProviderPolicyTranslation = {
+  modeFlag: '--approval-mode',
+  modeValues: {
+    'accept-edits': 'auto_edit',
+    plan: 'plan',
+    bypass: 'yolo',
+  },
+  allowFlag: { name: '--allowed-tools', format: 'csv' },
+  denyFlag: 'unsupported',
+};
 
 export interface BuildGeminiArgvInput {
   prompt: string;
@@ -58,8 +73,8 @@ export function buildGeminiArgv(input: BuildGeminiArgvInput): string[] {
   // process startup ("Cannot use both --yolo (-y) and --approval-mode
   // together. Use --approval-mode=yolo instead."). Normalize yolo into
   // --approval-mode yolo and surface real conflicts as a typed error.
-  const policyApproval = opts.permissionPolicy
-    ? policyApprovalMode(opts.permissionPolicy.mode)
+  const policyApproval = opts.permissionPolicy?.mode
+    ? GEMINI_POLICY_TABLE.modeValues[opts.permissionPolicy.mode]
     : undefined;
   if (opts.yolo) {
     if (opts.approvalMode && opts.approvalMode !== 'yolo') {
@@ -81,7 +96,9 @@ export function buildGeminiArgv(input: BuildGeminiArgvInput): string[] {
     argv.push('--approval-mode', opts.approvalMode);
   }
 
-  if (opts.permissionPolicy) applyPermissionPolicy(argv, opts.permissionPolicy);
+  if (opts.permissionPolicy) {
+    applyPermissionPolicy(argv, opts.permissionPolicy, 'gemini', GEMINI_POLICY_TABLE);
+  }
 
   if (opts.policyFiles && opts.policyFiles.length > 0) {
     for (const f of opts.policyFiles) argv.push('--policy', f);
@@ -116,26 +133,3 @@ export function buildGeminiArgv(input: BuildGeminiArgvInput): string[] {
   return argv;
 }
 
-function applyPermissionPolicy(argv: string[], policy: PermissionPolicy): void {
-  // Precedence: an explicit approvalMode (or yolo→yolo) already pushed wins.
-  if (argv.includes('--approval-mode')) return;
-  const mapped = policyApprovalMode(policy.mode);
-  if (mapped) argv.push('--approval-mode', mapped);
-  // Gemini has no tool-name deny list at the CLI layer; policy.deny is
-  // silently ignored here and a progress warning is emitted at runtime.
-}
-
-function policyApprovalMode(
-  mode: PermissionPolicy['mode'] | undefined,
-): 'auto_edit' | 'plan' | 'yolo' | undefined {
-  switch (mode) {
-    case 'accept-edits':
-      return 'auto_edit';
-    case 'plan':
-      return 'plan';
-    case 'bypass':
-      return 'yolo';
-    default:
-      return undefined;
-  }
-}

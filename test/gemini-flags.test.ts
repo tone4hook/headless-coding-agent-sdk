@@ -142,6 +142,34 @@ describe('buildGeminiArgv', () => {
     expect(argv[idx + 1]).toBe('auto_edit');
   });
 
+  it('maps permissionPolicy.allow to --allowed-tools as CSV', () => {
+    const argv = buildGeminiArgv({
+      prompt: 'hi',
+      opts: { permissionPolicy: { allow: ['Bash', 'Edit'] } },
+    });
+    const idx = argv.indexOf('--allowed-tools');
+    expect(idx).toBeGreaterThanOrEqual(0);
+    expect(argv[idx + 1]).toBe('Bash,Edit');
+  });
+
+  it('throws FeatureNotSupportedError for permissionPolicy.deny', () => {
+    expect(() =>
+      buildGeminiArgv({
+        prompt: 'hi',
+        opts: { permissionPolicy: { deny: ['Bash(rm:*)'] } },
+      }),
+    ).toThrow(FeatureNotSupportedError);
+  });
+
+  it('does not throw for permissionPolicy.deny when the list is empty', () => {
+    expect(() =>
+      buildGeminiArgv({
+        prompt: 'hi',
+        opts: { permissionPolicy: { mode: 'plan', deny: [] } },
+      }),
+    ).not.toThrow();
+  });
+
   it('throws FeatureNotSupportedError for Claude-only fields', () => {
     for (const field of [
       'permissionMode',

@@ -7,7 +7,22 @@
  */
 
 import { FeatureNotSupportedError } from '../../errors.js';
-import type { PermissionPolicy, RunOpts, SharedStartOpts } from '../../types.js';
+import type { RunOpts, SharedStartOpts } from '../../types.js';
+import {
+  applyPermissionPolicy,
+  type ProviderPolicyTranslation,
+} from '../shared/policy.js';
+
+const CLAUDE_POLICY_TABLE: ProviderPolicyTranslation = {
+  modeFlag: '--permission-mode',
+  modeValues: {
+    'accept-edits': 'acceptEdits',
+    plan: 'plan',
+    bypass: 'bypassPermissions',
+  },
+  allowFlag: { name: '--allowed-tools', format: 'multi' },
+  denyFlag: { name: '--disallowed-tools', format: 'multi' },
+};
 
 export interface BuildClaudeArgvInput {
   prompt: string;
@@ -63,7 +78,7 @@ export function buildClaudeArgv(input: BuildClaudeArgvInput): string[] {
 
   // Shared permissionPolicy → claude native flags.
   if (opts.permissionPolicy) {
-    applyPermissionPolicy(argv, opts.permissionPolicy);
+    applyPermissionPolicy(argv, opts.permissionPolicy, 'claude', CLAUDE_POLICY_TABLE);
   }
 
   if (opts.settingSources && opts.settingSources.length > 0) {
@@ -106,31 +121,3 @@ export function buildClaudeArgv(input: BuildClaudeArgvInput): string[] {
   return argv;
 }
 
-function applyPermissionPolicy(argv: string[], policy: PermissionPolicy): void {
-  // Precedence: an explicit `opts.permissionMode` (Claude-native) wins over
-  // the shared `permissionPolicy.mode`. We detect that by checking whether
-  // `--permission-mode` was already pushed. If so, skip re-adding it here.
-  switch (policy.mode) {
-    case 'accept-edits':
-      if (!argv.includes('--permission-mode'))
-        argv.push('--permission-mode', 'acceptEdits');
-      break;
-    case 'plan':
-      if (!argv.includes('--permission-mode'))
-        argv.push('--permission-mode', 'plan');
-      break;
-    case 'bypass':
-      if (!argv.includes('--permission-mode'))
-        argv.push('--permission-mode', 'bypassPermissions');
-      break;
-    default:
-      // 'default' or undefined — no override.
-      break;
-  }
-  if (policy.allow && policy.allow.length > 0) {
-    argv.push('--allowed-tools', ...policy.allow);
-  }
-  if (policy.deny && policy.deny.length > 0) {
-    argv.push('--disallowed-tools', ...policy.deny);
-  }
-}
