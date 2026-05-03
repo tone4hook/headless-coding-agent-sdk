@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.3.0 — 2026-05-03
+
+### Added
+- Codex adapter — third supported CLI alongside `claude` and `gemini`. New files under `src/adapters/codex/` (flags, index, translate) plus factory wiring in `src/factory.ts` and re-exports in `src/index.ts`.
+- Process-tree teardown helper at `src/transport/processTree.ts` and `tree-kill` typings — used by `spawn.ts` to terminate child process trees cleanly.
+- Schema additions in `src/types.ts` and `src/adapters/shared/spec.ts` to accommodate Codex-specific options without breaking existing Claude / Gemini call sites.
+
+### Changed
+- `src/transport/spawn.ts` updated to support process-tree teardown.
+- `src/adapters/shared/thread.ts`, `claude/flags.ts`, `gemini/flags.ts` adjusted for the unified three-adapter shape.
+
+### Tests
+- New `test/codex-flags.test.ts` and `test/translate-codex.test.ts`; existing flag/spawn/factory tests updated for the new adapter.
+
 ## 0.2.1 — 2026-04-27
 
 ### Fixed
