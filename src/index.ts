@@ -19,6 +19,11 @@ export type { ToolRegistry } from './tools/define.js';
 
 export { HttpMcpBridge } from './tools/bridge.js';
 export { shutdownSpawnedClis } from './transport/spawn.js';
+export {
+  installExitCleanup,
+  trackForExitCleanup,
+} from './transport/exitCleanup.js';
+export type { InstallExitCleanupOptions } from './transport/exitCleanup.js';
 
 export {
   CoderError,

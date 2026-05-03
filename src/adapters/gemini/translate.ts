@@ -11,6 +11,8 @@
  */
 
 import type { CoderStreamEvent, UsageStats } from '../../types.js';
+import { estimateCostUsd } from '../../pricing.js';
+import { classifyGeminiError } from './classify.js';
 
 type GeminiEvent = CoderStreamEvent<'gemini'>;
 
@@ -96,13 +98,36 @@ export function translateGeminiLine(line: string): GeminiEvent[] {
   if (type === 'result') {
     const events: GeminiEvent[] = [];
     const stats = (raw.stats as Record<string, unknown> | undefined) ?? {};
+    const inputTokens = stats.input_tokens as number | undefined;
+    const outputTokens = stats.output_tokens as number | undefined;
+    const totalTokens =
+      (stats.total_tokens as number | undefined) ??
+      (typeof inputTokens === 'number' && typeof outputTokens === 'number'
+        ? inputTokens + outputTokens
+        : undefined);
+    const cacheReadTokens =
+      (stats.cached as number | undefined) ??
+      (stats.cached_content_token_count as number | undefined) ??
+      (stats.cachedContentTokenCount as number | undefined);
+    const reasoningTokens =
+      (stats.thoughts_token_count as number | undefined) ??
+      (stats.thoughtsTokenCount as number | undefined);
     const usage: UsageStats = {
-      inputTokens: stats.input_tokens as number | undefined,
-      outputTokens: stats.output_tokens as number | undefined,
-      totalTokens: stats.total_tokens as number | undefined,
+      inputTokens,
+      outputTokens,
+      totalTokens,
+      cacheReadTokens,
+      reasoningTokens,
       durationMs: stats.duration_ms as number | undefined,
       raw: stats,
     };
+    // Gemini's `result` line doesn't include the model id; pull it from
+    // `models` (a Record<string, UsageStats>) when present.
+    const modelsObj = stats.models as Record<string, unknown> | undefined;
+    const model =
+      (raw.model as string | undefined) ??
+      (modelsObj ? Object.keys(modelsObj)[0] : undefined);
+    usage.costUsd = estimateCostUsd(model, usage);
     events.push({
       type: 'usage',
       provider: 'gemini',
@@ -118,11 +143,26 @@ export function translateGeminiLine(line: string): GeminiEvent[] {
 
     const status = raw.status as string | undefined;
     if (status === 'error') {
+      const message =
+        (raw.error as string | undefined) ??
+        'Gemini CLI reported an error result';
+      const errObj =
+        typeof raw.error === 'object' && raw.error !== null
+          ? (raw.error as Record<string, unknown>)
+          : undefined;
+      const c = classifyGeminiError({
+        message,
+        status,
+        errorType:
+          (errObj?.type as string | undefined) ??
+          (errObj?.code as string | undefined),
+      });
       events.push({
         type: 'error',
         provider: 'gemini',
-        message: 'Gemini CLI reported an error result',
-        code: status,
+        message,
+        code: c.code,
+        retryable: c.retryable,
         ts,
         originalItem: raw,
       });

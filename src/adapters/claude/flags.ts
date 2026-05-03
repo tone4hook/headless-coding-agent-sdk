@@ -75,8 +75,18 @@ export function buildClaudeArgv(input: BuildClaudeArgvInput): string[] {
     applyPermissionPolicy(argv, opts.permissionPolicy, 'claude', CLAUDE_POLICY_TABLE);
   }
 
-  if (opts.settingSources && opts.settingSources.length > 0) {
-    argv.push('--setting-sources', opts.settingSources.join(','));
+  // Resolve --setting-sources: explicit `settingSources` wins, otherwise
+  // the `isolation` preset selects defaults.
+  let resolvedSettingSources: Array<'local' | 'project' | 'user'> | undefined =
+    opts.settingSources;
+  if (resolvedSettingSources === undefined && opts.isolation) {
+    if (opts.isolation === 'strict') resolvedSettingSources = [];
+    else if (opts.isolation === 'project')
+      resolvedSettingSources = ['local', 'project'];
+    // 'user' → leave undefined so the CLI's own default applies.
+  }
+  if (resolvedSettingSources !== undefined) {
+    argv.push('--setting-sources', resolvedSettingSources.join(','));
   }
 
   if (opts.addDirs) argv.push('--add-dir', ...opts.addDirs);

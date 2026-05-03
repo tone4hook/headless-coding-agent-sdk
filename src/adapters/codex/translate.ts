@@ -7,6 +7,8 @@
  */
 
 import type { CoderStreamEvent, UsageStats } from '../../types.js';
+import { estimateCostUsd } from '../../pricing.js';
+import { classifyCodexError } from './classify.js';
 
 type CodexEvent = Record<string, unknown>;
 
@@ -33,18 +35,47 @@ function textFromContent(value: unknown): string | undefined {
   return parts.length > 0 ? parts.join('') : undefined;
 }
 
+function num(v: unknown): number | undefined {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : undefined;
+}
+
 function usageFrom(value: unknown): UsageStats | undefined {
   const obj = asObject(value);
   if (!obj) return undefined;
-  const inputTokens = Number(obj.input_tokens ?? obj.inputTokens ?? obj.prompt_tokens);
-  const outputTokens = Number(
+  const inputTokens = num(
+    obj.input_tokens ?? obj.inputTokens ?? obj.prompt_tokens,
+  );
+  const outputTokens = num(
     obj.output_tokens ?? obj.outputTokens ?? obj.completion_tokens,
   );
-  const totalTokens = Number(obj.total_tokens ?? obj.totalTokens);
+  let totalTokens = num(obj.total_tokens ?? obj.totalTokens);
+  if (totalTokens === undefined && inputTokens !== undefined && outputTokens !== undefined) {
+    totalTokens = inputTokens + outputTokens;
+  }
+
+  // Cached input tokens (cache hits).
+  const tokenDetails = asObject(obj.input_tokens_details ?? obj.inputTokensDetails);
+  const cacheReadTokens =
+    num(obj.cache_read_input_tokens) ??
+    num(obj.cached_input_tokens) ??
+    num(tokenDetails?.cached_tokens);
+
+  // Reasoning tokens (o-series style breakdown).
+  const outputDetails = asObject(
+    obj.output_tokens_details ?? obj.outputTokensDetails,
+  );
+  const reasoningTokens =
+    num(obj.reasoning_tokens) ??
+    num(obj.reasoningTokens) ??
+    num(outputDetails?.reasoning_tokens);
+
   return {
-    inputTokens: Number.isFinite(inputTokens) ? inputTokens : undefined,
-    outputTokens: Number.isFinite(outputTokens) ? outputTokens : undefined,
-    totalTokens: Number.isFinite(totalTokens) ? totalTokens : undefined,
+    inputTokens,
+    outputTokens,
+    totalTokens,
+    cacheReadTokens,
+    reasoningTokens,
     raw: value,
   };
 }
@@ -184,11 +215,15 @@ export function translateCodexLine(line: string): CoderStreamEvent<'codex'>[] {
   }
 
   if (type === 'usage' || payload.usage) {
+    const stats = usageFrom(payload.usage ?? payload);
+    if (stats && stats.costUsd === undefined) {
+      stats.costUsd = estimateCostUsd(asString(item.model) ?? asString(payload.model), stats);
+    }
     return [
       {
         provider: 'codex',
         type: 'usage',
-        stats: usageFrom(payload.usage ?? payload),
+        stats,
         ts,
         originalItem: item,
         extra: { raw: payload.usage ?? payload },
@@ -197,16 +232,23 @@ export function translateCodexLine(line: string): CoderStreamEvent<'codex'>[] {
   }
 
   if (type === 'error') {
+    const message =
+      asString(item.message) ??
+      asString(payload.message) ??
+      asString(payload.error) ??
+      'Codex CLI error';
+    const rawCode =
+      asString(item.code) ??
+      asString(payload.code) ??
+      asString(payload.type);
+    const c = classifyCodexError({ message, rawCode });
     return [
       {
         provider: 'codex',
         type: 'error',
-        code: asString(item.code) ?? asString(payload.code),
-        message:
-          asString(item.message) ??
-          asString(payload.message) ??
-          asString(payload.error) ??
-          'Codex CLI error',
+        code: c.code,
+        retryable: c.retryable,
+        message,
         ts,
         originalItem: item,
       },
@@ -222,6 +264,12 @@ export function translateCodexLine(line: string): CoderStreamEvent<'codex'>[] {
     const events: CoderStreamEvent<'codex'>[] = [];
     const usage = usageFrom(item.usage ?? payload.usage);
     if (usage) {
+      if (usage.costUsd === undefined) {
+        usage.costUsd = estimateCostUsd(
+          asString(item.model) ?? asString(payload.model),
+          usage,
+        );
+      }
       events.push({
         provider: 'codex',
         type: 'usage',
@@ -231,19 +279,26 @@ export function translateCodexLine(line: string): CoderStreamEvent<'codex'>[] {
         extra: { raw: item.usage ?? payload.usage },
       });
     }
-    events.push({
-      provider: 'codex',
-      type: type === 'turn_aborted' ? 'cancelled' : 'done',
-      ts,
-      originalItem: item,
-      extra:
-        type === 'turn_aborted'
-          ? undefined
-          : {
-              terminalReason:
-                asString(item.reason) ?? asString(payload.reason) ?? 'success',
-            },
-    } as CoderStreamEvent<'codex'>);
+    if (type === 'turn_aborted') {
+      events.push({
+        provider: 'codex',
+        type: 'cancelled',
+        code: 'interrupted',
+        ts,
+        originalItem: item,
+      });
+    } else {
+      events.push({
+        provider: 'codex',
+        type: 'done',
+        ts,
+        originalItem: item,
+        extra: {
+          terminalReason:
+            asString(item.reason) ?? asString(payload.reason) ?? 'success',
+        },
+      });
+    }
     return events;
   }
 

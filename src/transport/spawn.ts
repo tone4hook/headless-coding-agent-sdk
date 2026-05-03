@@ -9,6 +9,7 @@
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { chunkedToLines } from './lines.js';
+import { sanitizeEnv } from './env.js';
 import { delay, killProcessTree, type KillSignal } from './processTree.js';
 
 export interface SpawnCliOptions {
@@ -46,29 +47,67 @@ async function withDeadline<T>(promise: Promise<T>, ms: number): Promise<T | und
   ]);
 }
 
+export interface ComposeEnvOptions {
+  extraEnv?: Record<string, string>;
+  unsetEnv?: string[];
+  /**
+   * Run the deny-list sanitizer over `parentEnv` before applying `extraEnv`.
+   * Default: true. Set false to pass the host env through verbatim.
+   */
+  cleanEnv?: boolean;
+  /** Extra deny keys appended to the sanitizer's defaults. */
+  additionalDenyEnv?: string[];
+}
+
 /**
  * Compose a child-process env from a parent env, overlay, and unset list.
  *
  * Order of operations:
- *   1. Clone `parentEnv`.
- *   2. Spread `extraEnv` (empty strings are preserved as legitimate values).
+ *   1. (optional) sanitize `parentEnv` via the deny list (default ON).
+ *   2. Spread `extraEnv` (empty strings are preserved as legitimate values
+ *      and can intentionally re-add a sanitized key).
  *   3. Delete every key listed in `unsetEnv` (last word — wins over a
  *      same-key `extraEnv` value).
  *
- * Used by adapters to honor `SharedStartOpts.extraEnv` and `unsetEnv`. The
- * `unsetEnv` field exists so callers can strip stale auth env vars
- * (e.g. `ANTHROPIC_API_KEY`) and force the CLI to fall back to OAuth /
- * keychain credentials, which is otherwise impossible because empty-string
- * values do not unset.
+ * Used by adapters to honor `SharedStartOpts.extraEnv`, `unsetEnv`,
+ * `cleanEnv`, and `additionalDenyEnv`. The `unsetEnv` field exists so
+ * callers can strip stale auth env vars (e.g. `ANTHROPIC_API_KEY`) and
+ * force the CLI's OAuth / keychain fallback, which empty-string values
+ * cannot do.
+ *
+ * Two call signatures supported:
+ *   - composeEnv(parent, extraEnv, unsetEnv)               // legacy
+ *   - composeEnv(parent, { extraEnv, unsetEnv, cleanEnv })  // current
  */
 export function composeEnv(
   parentEnv: NodeJS.ProcessEnv,
-  extraEnv?: Record<string, string>,
+  extraEnvOrOptions?: Record<string, string> | ComposeEnvOptions,
   unsetEnv?: string[],
 ): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...parentEnv, ...(extraEnv ?? {}) };
-  if (unsetEnv) {
-    for (const key of unsetEnv) {
+  let opts: ComposeEnvOptions;
+  if (
+    extraEnvOrOptions &&
+    ('cleanEnv' in extraEnvOrOptions ||
+      'additionalDenyEnv' in extraEnvOrOptions ||
+      'extraEnv' in extraEnvOrOptions ||
+      'unsetEnv' in extraEnvOrOptions)
+  ) {
+    opts = extraEnvOrOptions as ComposeEnvOptions;
+  } else {
+    opts = {
+      extraEnv: extraEnvOrOptions as Record<string, string> | undefined,
+      unsetEnv,
+    };
+  }
+
+  const cleanEnv = opts.cleanEnv ?? true;
+  const base = cleanEnv
+    ? sanitizeEnv(parentEnv, { additionalDeny: opts.additionalDenyEnv })
+    : { ...parentEnv };
+
+  const env: NodeJS.ProcessEnv = { ...base, ...(opts.extraEnv ?? {}) };
+  if (opts.unsetEnv) {
+    for (const key of opts.unsetEnv) {
       delete env[key];
     }
   }
@@ -84,6 +123,12 @@ export function spawnCli(opts: SpawnCliOptions): SpawnedCli {
     env: opts.env ?? process.env,
     cwd: opts.cwd,
     stdio: ['pipe', 'pipe', 'pipe'],
+    // Put the child in its own process group on POSIX so killProcessTree
+    // can target every descendant via `process.kill(-pid)` even if the
+    // direct CLI dies before we can walk its tree. Not on Windows: there
+    // is no setpgid; taskkill /T /F handles tree teardown via the job
+    // object instead.
+    detached: process.platform !== 'win32',
   });
 
   if (opts.stdin !== undefined) {

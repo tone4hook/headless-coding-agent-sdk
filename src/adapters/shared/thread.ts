@@ -25,6 +25,8 @@ import { HttpMcpBridge } from '../../tools/bridge.js';
 import { createToolRegistry } from '../../tools/define.js';
 import { mergeStdoutStderr } from '../../transport/lines.js';
 import { composeEnv, spawnCli, type SpawnedCli } from '../../transport/spawn.js';
+import { createStallTimer } from '../../transport/stallTimer.js';
+import { trackForExitCleanup } from '../../transport/exitCleanup.js';
 import type { AdapterSpec, McpHandshake, PreparedRun } from './spec.js';
 
 export interface GenericThreadInit {
@@ -72,7 +74,9 @@ export class GenericThread<P extends Provider> implements ThreadHandle<P> {
         text = (text ?? '') + ev.text;
       }
       if (ev.type === 'usage') usage = ev.stats;
-      if (ev.type === 'error') error = { code: ev.code, message: ev.message };
+      if (ev.type === 'error') {
+        error = { code: ev.code, message: ev.message, retryable: ev.retryable };
+      }
       if (ev.type === 'done') terminalReason = ev.extra?.terminalReason;
     }
 
@@ -110,11 +114,12 @@ export class GenericThread<P extends Provider> implements ThreadHandle<P> {
       prompt = this.spec.transformPrompt(prompt, effectiveOpts);
     }
 
-    const env = composeEnv(
-      process.env,
-      effectiveOpts.extraEnv,
-      effectiveOpts.unsetEnv,
-    );
+    const env = composeEnv(process.env, {
+      extraEnv: effectiveOpts.extraEnv,
+      unsetEnv: effectiveOpts.unsetEnv,
+      cleanEnv: effectiveOpts.cleanEnv,
+      additionalDenyEnv: effectiveOpts.additionalDenyEnv,
+    });
 
     if (effectiveOpts.tools && effectiveOpts.tools.length > 0) {
       if (!this.spec.registerMcp) {
@@ -144,15 +149,38 @@ export class GenericThread<P extends Provider> implements ThreadHandle<P> {
           stdin: this.spec.promptTransport === 'stdin' ? prompt : undefined,
         };
     const argv = [...this.prepared.argv];
+    if (this.prepared.env) Object.assign(env, this.prepared.env);
     if (this.mcp?.argv) argv.push(...this.mcp.argv);
+
+    // Combine the caller's signal with an internal controller so the stall
+    // timer can abort the spawn just like a caller-driven cancellation.
+    const internalAbort = new AbortController();
+    const callerSignal = runOpts?.signal;
+    if (callerSignal) {
+      if (callerSignal.aborted) internalAbort.abort();
+      else
+        callerSignal.addEventListener('abort', () => internalAbort.abort(), {
+          once: true,
+        });
+    }
+
+    let stalled = false;
+    const stall = createStallTimer(effectiveOpts.stallTimeoutMs, () => {
+      stalled = true;
+      internalAbort.abort();
+    });
 
     this.active = spawnCli({
       bin: this.spec.bin,
       args: argv,
       env,
       cwd: effectiveOpts.workingDirectory,
-      signal: runOpts?.signal,
+      signal: internalAbort.signal,
       stdin: this.prepared.stdin,
+    });
+
+    const untrackExit = trackForExitCleanup(() => {
+      this.active?.kill();
     });
 
     const stderrChunks: string[] = [];
@@ -162,6 +190,7 @@ export class GenericThread<P extends Provider> implements ThreadHandle<P> {
         this.active.lines,
         this.active.stderr,
       )) {
+        stall.reset();
         if (item.src === 'stderr') {
           stderrChunks.push(item.line);
           yield {
@@ -180,10 +209,23 @@ export class GenericThread<P extends Provider> implements ThreadHandle<P> {
           yield ev;
         }
       }
+
+      if (stalled) {
+        yield {
+          provider: this.provider,
+          type: 'error',
+          code: 'stalled',
+          retryable: true,
+          message: `No events for ${effectiveOpts.stallTimeoutMs}ms; run aborted`,
+          ts: Date.now(),
+        } as CoderStreamEvent<P>;
+      }
     } finally {
+      stall.cancel();
+      untrackExit();
       const { exitCode, signal } = await this.active.done;
       await this.cleanup();
-      if (exitCode !== 0 && signal === null) {
+      if (!stalled && exitCode !== 0 && signal === null) {
         throw new CliExitError(
           this.provider,
           exitCode,

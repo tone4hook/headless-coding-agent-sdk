@@ -137,6 +137,16 @@ export interface SharedStartOpts {
   /** Extra env vars for the spawned CLI. Both adapters. */
   extraEnv?: Record<string, string>;
   /**
+   * Sanitize the host env before spawn — strip noisy host vars
+   * (`NODE_OPTIONS`, `npm_*`, `CLAUDECODE`, etc.) that leak into the child
+   * and cause slow startup, accidental debugger attach, or false
+   * "we're inside Claude Code" signals. Provider auth/proxy/CA-bundle
+   * vars are preserved by default. Default: `true`.
+   */
+  cleanEnv?: boolean;
+  /** Extra deny-list keys to remove when `cleanEnv` is on. */
+  additionalDenyEnv?: string[];
+  /**
    * Env var names to delete from the spawn env after `extraEnv` is applied.
    * Empty-string values in `extraEnv` are preserved as legitimate values, so
    * stripping requires this explicit list. Common use: remove stale auth env
@@ -159,6 +169,20 @@ export interface SharedStartOpts {
     | 'plan';
   /** @adapter claude — maps to `--setting-sources`. */
   settingSources?: Array<'local' | 'project' | 'user'>;
+  /**
+   * @adapter claude — convenience preset for plugin/setting isolation.
+   *
+   *  - `strict`:  no settings sources, fresh `CLAUDE_CONFIG_DIR`,
+   *               empty MCP config (no user-level MCP discovery).
+   *  - `project`: `local + project` settings sources only (skip `user`).
+   *  - `user`:    current default (`local + project + user`, loads user
+   *               plugins).
+   *
+   * Explicit `settingSources` always overrides the preset. Strict mode
+   * sets `CLAUDE_CONFIG_DIR` only for the spawn (via `extraEnv`); the
+   * host process's env is never mutated.
+   */
+  isolation?: 'strict' | 'project' | 'user';
   /** @adapter claude — maps to `--add-dir`. */
   addDirs?: string[];
   /** @adapter claude — maps to `--fork-session` on resume. */
@@ -227,6 +251,15 @@ export interface RunOpts {
   streamPartialMessages?: boolean;
   /** Cap the number of model turns for this run. */
   maxTurns?: number;
+  /**
+   * Abort the run if no normalized event is emitted for this many ms.
+   * The timer resets on every yielded event (`message`, `tool_use`,
+   * `progress`, `usage`, `stderr`, etc.). Default: undefined (disabled).
+   *
+   * On stall the run aborts via the existing signal plumbing and a final
+   * `error` event with `code: 'stalled'` is synthesized.
+   */
+  stallTimeoutMs?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -238,13 +271,35 @@ export interface UsageStats {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
+  /** Reasoning/thinking tokens billed separately (Codex/Gemini reasoning models). */
+  reasoningTokens?: number;
   totalTokens?: number;
+  /** Best-effort cost. Undefined (not NaN) for unknown models. */
   costUsd?: number;
   durationMs?: number;
   numTurns?: number;
   /** Full provider-specific usage payload. */
   raw?: unknown;
 }
+
+/**
+ * Stable taxonomy for CoderStreamEvent `error` and `cancelled` events.
+ * Adapters classify raw failure shapes (CLI exit codes, stderr patterns,
+ * provider error JSON) into this union so consumers can branch without
+ * regex-matching `message`.
+ */
+export type CoderErrorCode =
+  | 'interrupted'
+  | 'stalled'
+  | 'timeout'
+  | 'binary_not_found'
+  | 'auth_expired'
+  | 'rate_limit'
+  | 'context_too_large'
+  | 'network_error'
+  | 'tool_crash'
+  | 'protocol_error'
+  | 'unknown';
 
 export interface RunResult<P extends Provider = Provider> {
   threadId?: string;
@@ -257,7 +312,7 @@ export interface RunResult<P extends Provider = Provider> {
   events: CoderStreamEvent<P>[];
   /** Terminal reason emitted by the CLI (`success`, `error`, `cancelled`, etc.). */
   terminalReason?: string;
-  error?: { code?: string; message: string };
+  error?: { code: CoderErrorCode; message: string; retryable?: boolean };
 }
 
 // ---------------------------------------------------------------------------
@@ -470,10 +525,15 @@ export type CoderStreamEvent<P extends Provider = Provider> =
     } & EventBase<P, 'usage'>)
   | ({
       type: 'error';
-      code?: string;
+      code: CoderErrorCode;
       message: string;
+      /** Best-effort retry hint stamped by the adapter. */
+      retryable?: boolean;
     } & EventBase<P, 'error'>)
-  | ({ type: 'cancelled' } & EventBase<P, 'cancelled'>)
+  | ({
+      type: 'cancelled';
+      code?: 'interrupted' | 'stalled';
+    } & EventBase<P, 'cancelled'>)
   | ({ type: 'done' } & EventBase<P, 'done'>)
   | ({ type: 'stderr'; line: string } & EventBase<P, 'stderr'>);
 

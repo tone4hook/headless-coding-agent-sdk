@@ -41,6 +41,8 @@ export interface BuildArgvCtx {
 export interface PreparedRun {
   argv: string[];
   stdin?: string;
+  /** Extra env vars to merge into the spawn (applied after composeEnv). */
+  env?: Record<string, string>;
   cleanup?: () => Promise<void>;
 }
 

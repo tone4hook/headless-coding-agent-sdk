@@ -16,9 +16,58 @@ import {
   GenericThread,
   createCoderFromSpec,
 } from '../shared/thread.js';
-import type { AdapterSpec, McpHandshake } from '../shared/spec.js';
+import type { AdapterSpec, McpHandshake, PreparedRun } from '../shared/spec.js';
 import { buildClaudeArgv } from './flags.js';
 import { translateClaudeLine } from './translate.js';
+
+/**
+ * Prepare per-run state for the Claude adapter. When `isolation: 'strict'`
+ * is set we mint a fresh `CLAUDE_CONFIG_DIR` (passed via `extraEnv` for
+ * this spawn only — never written to `process.env`), and supply an empty
+ * MCP config + `--strict-mcp-config` so user-level MCP servers don't load.
+ */
+async function prepareClaudeRun(ctx: {
+  prompt: string;
+  opts: SharedStartOpts & Record<string, unknown>;
+  resumeId?: string;
+  resumeLatest: boolean;
+}): Promise<PreparedRun> {
+  const baseArgv = buildClaudeArgv({
+    prompt: ctx.prompt,
+    opts: ctx.opts,
+    resumeId: ctx.resumeId,
+    continueLatest: ctx.resumeLatest,
+  });
+
+  if (ctx.opts.isolation !== 'strict') {
+    return { argv: baseArgv, stdin: ctx.prompt };
+  }
+
+  const isoDir = await mkdtemp(join(tmpdir(), 'hca-claude-iso-'));
+  const mcpPath = join(isoDir, 'mcp.json');
+  await writeFile(mcpPath, JSON.stringify({ mcpServers: {} }));
+
+  const argv = [...baseArgv, '--mcp-config', mcpPath, '--strict-mcp-config'];
+  const env: Record<string, string> = { CLAUDE_CONFIG_DIR: isoDir };
+
+  return {
+    argv,
+    stdin: ctx.prompt,
+    env,
+    cleanup: async () => {
+      const tmpRoot = resolve(tmpdir());
+      const resolved = resolve(isoDir);
+      if (
+        resolved.startsWith(tmpRoot + '/') ||
+        resolved.startsWith(tmpRoot + '\\')
+      ) {
+        await rm(resolved, { recursive: true, force: true }).catch(
+          () => undefined,
+        );
+      }
+    },
+  };
+}
 
 async function registerClaudeMcp(bridge: HttpMcpBridge): Promise<McpHandshake> {
   const dir = await mkdtemp(join(tmpdir(), 'hca-claude-mcp-'));
@@ -58,6 +107,13 @@ export const claudeSpec: AdapterSpec<'claude'> = {
       opts: ctx.opts,
       resumeId: ctx.resumeId,
       continueLatest: ctx.resumeLatest,
+    }),
+  prepareRun: (ctx) =>
+    prepareClaudeRun({
+      prompt: ctx.prompt,
+      opts: ctx.opts as SharedStartOpts & Record<string, unknown>,
+      resumeId: ctx.resumeId,
+      resumeLatest: ctx.resumeLatest,
     }),
   translateLine: translateClaudeLine,
   registerMcp: registerClaudeMcp,

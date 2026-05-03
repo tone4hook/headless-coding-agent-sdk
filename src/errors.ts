@@ -34,7 +34,7 @@ export class CoderError extends Error {
 export class CliNotFoundError extends CoderError {
   readonly code = 'CLI_NOT_FOUND' as const;
 
-  constructor(bin: string, provider: Provider) {
+  constructor(bin: string, provider?: Provider) {
     super('CLI_NOT_FOUND', `${bin} binary not found on PATH`, provider);
     this.name = 'CliNotFoundError';
   }

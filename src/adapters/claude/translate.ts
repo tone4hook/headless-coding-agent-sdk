@@ -10,6 +10,8 @@
  */
 
 import type { CoderStreamEvent } from '../../types.js';
+import { estimateCostUsd } from '../../pricing.js';
+import { classifyClaudeError } from './classify.js';
 
 type ClaudeEvent = CoderStreamEvent<'claude'>;
 
@@ -190,11 +192,13 @@ function handleAssistant(raw: Record<string, unknown>, ts: number): ClaudeEvent[
   // Surface authentication/other top-level errors on the assistant line
   // (they show up as `"error":"..."` alongside the message).
   if (typeof raw.error === 'string') {
+    const c = classifyClaudeError({ message: raw.error });
     events.push({
       type: 'error',
       provider: 'claude',
       message: raw.error,
-      code: raw.error,
+      code: c.code,
+      retryable: c.retryable,
       ts,
       originalItem: raw,
     });
@@ -241,19 +245,23 @@ function handleResult(raw: Record<string, unknown>, ts: number): ClaudeEvent[] {
   const usage = raw.usage as Record<string, unknown> | undefined;
 
   if (usage) {
+    const stats = {
+      inputTokens: usage.input_tokens as number | undefined,
+      outputTokens: usage.output_tokens as number | undefined,
+      cacheCreationTokens: usage.cache_creation_input_tokens as number | undefined,
+      cacheReadTokens: usage.cache_read_input_tokens as number | undefined,
+      costUsd: raw.total_cost_usd as number | undefined,
+      durationMs: raw.duration_ms as number | undefined,
+      numTurns: raw.num_turns as number | undefined,
+      raw: usage,
+    };
+    if (stats.costUsd === undefined) {
+      stats.costUsd = estimateCostUsd(raw.model as string | undefined, stats);
+    }
     events.push({
       type: 'usage',
       provider: 'claude',
-      stats: {
-        inputTokens: usage.input_tokens as number | undefined,
-        outputTokens: usage.output_tokens as number | undefined,
-        cacheCreationTokens: usage.cache_creation_input_tokens as number | undefined,
-        cacheReadTokens: usage.cache_read_input_tokens as number | undefined,
-        costUsd: raw.total_cost_usd as number | undefined,
-        durationMs: raw.duration_ms as number | undefined,
-        numTurns: raw.num_turns as number | undefined,
-        raw: usage,
-      },
+      stats,
       ts,
       extra: {
         modelUsage: raw.modelUsage as Record<string, unknown> | undefined,
@@ -265,13 +273,21 @@ function handleResult(raw: Record<string, unknown>, ts: number): ClaudeEvent[] {
   }
 
   if (raw.is_error === true) {
+    const message = (raw.result as string | undefined) ?? 'CLI reported error';
+    const apiErrorStatus = raw.api_error_status as number | undefined;
+    const c = classifyClaudeError({
+      message,
+      subtype: raw.subtype as string | undefined,
+      apiErrorStatus,
+    });
     events.push({
       type: 'error',
       provider: 'claude',
-      message: (raw.result as string | undefined) ?? 'CLI reported error',
-      code: raw.subtype as string | undefined,
+      message,
+      code: c.code,
+      retryable: c.retryable,
       ts,
-      extra: { apiErrorStatus: raw.api_error_status as number | undefined },
+      extra: { apiErrorStatus },
       originalItem: raw,
     });
   }
