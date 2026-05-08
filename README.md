@@ -1,24 +1,23 @@
 # headless-coding-agent-sdk
 
-TypeScript SDK that unifies headless coding-agent **CLI binaries**
-behind one I/O schema. MVP targets:
+TypeScript SDK that unifies headless coding-agent **CLI binaries** behind
+one I/O schema. Supported CLIs:
 
-- `claude` — Claude Code in headless mode (`claude -p`)
-- `gemini` — Gemini CLI in headless mode (`gemini -p`)
+- `claude` — Claude Code (`claude -p`)
+- `gemini` — Gemini CLI (`gemini -p`)
+- `codex` — OpenAI Codex CLI (`codex exec`)
 
-This SDK wraps the CLIs only. It does **not** depend on any vendor JS
-SDK (`@anthropic-ai/*`, `@google/generative-ai`). Auth is whatever the
-installed CLI already has configured on your machine.
+Subprocess-only — no vendor JS SDK dependencies (`@anthropic-ai/*`,
+`@google/generative-ai`, `@openai/*`). Auth is whatever the installed CLI
+already has configured on your machine.
 
 ## Installation
 
-This package is published to **GitHub Packages**, so installing it requires a
-one-time auth setup.
+Published to **GitHub Packages** — one-time auth setup required.
 
 1. Create a GitHub [Personal Access Token (classic)](https://github.com/settings/tokens)
    with the `read:packages` scope.
-2. Add the following to `~/.npmrc` (or a project-level `.npmrc`), substituting
-   your token:
+2. Add to `~/.npmrc` (or a project-level `.npmrc`):
 
    ```
    @tone4hook:registry=https://npm.pkg.github.com
@@ -32,6 +31,7 @@ one-time auth setup.
    # plus the CLI(s) you plan to use:
    # npm install -g @anthropic-ai/claude-code
    # npm install -g @google/gemini-cli
+   # npm install -g @openai/codex
    ```
 
 ## 60-second quickstart
@@ -39,7 +39,7 @@ one-time auth setup.
 ```ts
 import { createCoder } from '@tone4hook/headless-coding-agent-sdk';
 
-const coder = createCoder('claude'); // or 'gemini'
+const coder = createCoder('claude'); // 'claude' | 'gemini' | 'codex'
 const thread = await coder.startThread();
 
 const result = await thread.run('Say hi in three words.');
@@ -62,9 +62,8 @@ for await (const ev of thread.runStreamed('plan a migration')) {
 ### Token-by-token deltas (Claude)
 
 Pass `streamPartialMessages: true` to receive each text chunk as
-`{type:'message', role:'assistant', delta:true, text:<chunk>}`. The
-final aggregated message is still emitted with `delta:false`, so
-existing consumers that only read the final message keep working.
+`{type:'message', role:'assistant', delta:true, text:<chunk>}`. The final
+aggregated message is still emitted with `delta:false`.
 
 ```ts
 for await (const ev of thread.runStreamed('write a haiku', { streamPartialMessages: true })) {
@@ -74,14 +73,13 @@ for await (const ev of thread.runStreamed('write a haiku', { streamPartialMessag
 }
 ```
 
-Gemini silently ignores the flag.
+Gemini and Codex silently ignore the flag.
 
 ### Auth: forcing OAuth / keychain
 
-Both CLIs prefer their OAuth/keychain credentials, but they fall back to
-env-var keys when present (e.g. `ANTHROPIC_API_KEY`). To force the
-CLI to use its keychain credentials regardless of inherited env, list
-the offenders in `unsetEnv`:
+CLIs prefer OAuth/keychain credentials but fall back to env-var keys when
+present (e.g. `ANTHROPIC_API_KEY`). To force keychain regardless of inherited
+env, list the offenders in `unsetEnv`:
 
 ```ts
 const coder = createCoder('claude', {
@@ -94,10 +92,10 @@ const coder = createCoder('claude', {
 });
 ```
 
-Empty-string values in `extraEnv` are preserved as legitimate values
-rather than treated as deletes — `unsetEnv` is the explicit strip list.
+Empty-string values in `extraEnv` are preserved as legitimate values;
+`unsetEnv` is the explicit strip list.
 
-### Custom tools (works on both adapters)
+### Custom tools (Claude and Gemini)
 
 ```ts
 import { createCoder, tool } from '@tone4hook/headless-coding-agent-sdk';
@@ -117,9 +115,10 @@ const coder = createCoder('claude', {
 });
 ```
 
-Behind the scenes the SDK hosts a localhost MCP server per thread and
-wires each CLI to it — Claude via `--mcp-config`, Gemini via an
-ephemeral `GEMINI_CLI_HOME` with merged settings.
+The SDK hosts a localhost MCP server per thread and wires each CLI to it —
+Claude via `--mcp-config`, Gemini via an ephemeral `GEMINI_CLI_HOME`. Codex
+does not yet support the MCP bridge and will throw
+`FeatureNotSupportedError` if `tools` is set.
 
 ### Resume a prior session
 
@@ -128,7 +127,7 @@ const coder = createCoder('claude');
 const thread = await coder.resumeThread(previousThreadId);
 ```
 
-Both CLIs identify sessions by UUID.
+All three CLIs identify sessions by UUID.
 
 ### Structured output
 
@@ -138,30 +137,29 @@ const { json } = await thread.run('return {"name": "...", "age": N}', {
 });
 ```
 
-Claude validates server-side via `--json-schema`. Gemini best-efforts
-via prompt injection; pass `strictSchema: true` to get a
+Claude and Codex validate server-side (`--json-schema` / `--output-schema`).
+Gemini best-efforts via prompt injection; pass `strictSchema: true` to get
 `FeatureNotSupportedError` instead of best-effort.
 
 ## Design principle
 
-The shared schema is not a lowest-common-denominator: features only one
-CLI supports (permission modes, `--fork-session`, `--json-schema`, etc.)
-remain accessible as optional fields. Adapters that don't honor a field
-throw `FeatureNotSupportedError` at call time rather than silently
+The shared schema is not a lowest-common-denominator: features only one CLI
+supports stay accessible as optional fields. Adapters that don't honor a
+field throw `FeatureNotSupportedError` at call time rather than silently
 dropping it.
 
-See [`.plan/findings.md`](./.plan/findings.md) for the full design and
-[`docs/adapters.md`](./docs/adapters.md) for the per-adapter flag
-coverage matrix.
+See [`docs/adapters.md`](./docs/adapters.md) for the per-adapter coverage
+matrix.
 
 ## Subpath imports
 
 ```ts
 import { createClaudeCoder } from '@tone4hook/headless-coding-agent-sdk/claude';
 import { createGeminiCoder } from '@tone4hook/headless-coding-agent-sdk/gemini';
+import { createCodexCoder } from '@tone4hook/headless-coding-agent-sdk/codex';
 ```
 
 ## Status
 
-Pre-alpha. MVP feature set implemented; breaking API changes likely
-before 1.0.
+Pre-1.0. Three-adapter feature set implemented; breaking API changes
+possible before 1.0.
