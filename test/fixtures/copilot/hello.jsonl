@@ -1,0 +1,3 @@
+{"type":"session","session_id":"copilot-session-1","model":"gpt-5.4","cwd":"/repo"}
+{"type":"message","role":"assistant","text":"Hello from Copilot."}
+{"type":"done","reason":"success","usage":{"input_tokens":3,"output_tokens":4}}

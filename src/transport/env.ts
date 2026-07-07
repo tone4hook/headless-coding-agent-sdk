@@ -1,11 +1,11 @@
 /**
  * Environment-variable hygiene for spawned CLIs.
  *
- * The SDK spawns three external Node-based CLIs. Without sanitation the host
+ * The SDK spawns external coding-agent CLIs. Without sanitation the host
  * process's `NODE_OPTIONS=--require ts-node/register`, `npm_*`, `CLAUDECODE`,
  * etc. leak into every child and have caused: slow Node startup, accidental
  * debugger attach, and false "we're inside Claude Code" signals reaching
- * Gemini's child shells.
+ * provider child shells.
  *
  * Strategy: deny-list, not allow-list. Provider-specific auth/proxy/CA-bundle
  * vars (`HTTPS_PROXY`, `SSL_CERT_FILE`, `NODE_EXTRA_CA_CERTS`, `HOME`,

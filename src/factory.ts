@@ -8,8 +8,9 @@
 import type { HeadlessCoder, Provider, SharedStartOpts } from './types.js';
 import { CoderError } from './errors.js';
 import { createClaudeCoder } from './adapters/claude/index.js';
-import { createGeminiCoder } from './adapters/gemini/index.js';
 import { createCodexCoder } from './adapters/codex/index.js';
+import { createCopilotCoder } from './adapters/copilot/index.js';
+import { createPiCoder } from './adapters/pi/index.js';
 
 export function createCoder<P extends Provider>(
   name: P,
@@ -18,10 +19,12 @@ export function createCoder<P extends Provider>(
   switch (name) {
     case 'claude':
       return createClaudeCoder(defaults) as unknown as HeadlessCoder<P>;
-    case 'gemini':
-      return createGeminiCoder(defaults) as unknown as HeadlessCoder<P>;
     case 'codex':
       return createCodexCoder(defaults) as unknown as HeadlessCoder<P>;
+    case 'copilot':
+      return createCopilotCoder(defaults) as unknown as HeadlessCoder<P>;
+    case 'pi':
+      return createPiCoder(defaults) as unknown as HeadlessCoder<P>;
     default:
       throw new CoderError('UNKNOWN_PROVIDER', `Unknown provider: ${String(name)}`);
   }

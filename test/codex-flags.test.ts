@@ -5,11 +5,12 @@ import { FeatureNotSupportedError } from '../src/errors.js';
 describe('buildCodexArgv', () => {
   it('uses codex exec json mode and reads the prompt from stdin', () => {
     const argv = buildCodexArgv({ opts: {} });
-    expect(argv.slice(0, 4)).toEqual([
+    expect(argv.slice(0, 5)).toEqual([
       'exec',
       '--json',
       '--skip-git-repo-check',
-      '--full-auto',
+      '--sandbox',
+      'workspace-write',
     ]);
     expect(argv.at(-1)).toBe('-');
   });
@@ -20,7 +21,7 @@ describe('buildCodexArgv', () => {
         model: 'gpt-5.3-codex',
         workingDirectory: '/repo',
         addDirs: ['/tmp/sidecar'],
-        codexReasoningEffort: 'high',
+        reasoningEffort: 'high',
         codexNetworkAccess: true,
         codexDisablePlugins: true,
         codexSearch: true,
@@ -42,11 +43,43 @@ describe('buildCodexArgv', () => {
     expect(argv).toContain('/tmp/schema.json');
   });
 
+  it('maps resume and latest resume to codex exec resume', () => {
+    expect(buildCodexArgv({ opts: {}, resumeId: 'sess-1' }).slice(-3)).toEqual([
+      'resume',
+      'sess-1',
+      '-',
+    ]);
+    expect(buildCodexArgv({ opts: {}, resumeLatest: true }).slice(-3)).toEqual([
+      'resume',
+      '--last',
+      '-',
+    ]);
+  });
+
+  it('maps bypass and plan permission policy to explicit sandbox flags', () => {
+    expect(
+      buildCodexArgv({
+        opts: { permissionPolicy: { mode: 'bypass' } },
+      }),
+    ).toContain('--dangerously-bypass-approvals-and-sandbox');
+    expect(
+      buildCodexArgv({
+        opts: { permissionPolicy: { mode: 'plan' } },
+      }),
+    ).toContain('read-only');
+  });
+
   it('rejects unsupported deny behaviour', () => {
     expect(() =>
       buildCodexArgv({
         opts: { permissionPolicy: { deny: ['Bash'] } },
       }),
+    ).toThrow(FeatureNotSupportedError);
+  });
+
+  it('rejects max reasoning effort', () => {
+    expect(() =>
+      buildCodexArgv({ opts: { reasoningEffort: 'max' } }),
     ).toThrow(FeatureNotSupportedError);
   });
 });

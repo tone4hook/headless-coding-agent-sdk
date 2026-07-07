@@ -1,5 +1,5 @@
 /**
- * Classify a Gemini CLI error/result into a CoderErrorCode.
+ * Classify a Pi coding-agent error into a CoderErrorCode.
  */
 
 import type { CoderErrorCode } from '../../types.js';
@@ -9,32 +9,29 @@ import {
   type Classification,
 } from '../shared/classify.js';
 
-export interface GeminiErrorInput {
+export interface PiErrorInput {
   message?: string;
-  /** Status string from a Gemini `result` event, if any. */
-  status?: string;
-  /** `error.type` from a structured Gemini error payload. */
-  errorType?: string;
+  rawCode?: string;
 }
 
-export function classifyGeminiError(input: GeminiErrorInput): Classification {
-  const { message, errorType } = input;
+export function classifyPiError(input: PiErrorInput): Classification {
+  const { message, rawCode } = input;
 
-  if (errorType) {
-    const lc = errorType.toLowerCase();
-    if (lc.includes('rate') || lc.includes('quota') || lc.includes('overload')) {
+  if (rawCode) {
+    const lc = rawCode.toLowerCase();
+    if (lc.includes('rate') || lc.includes('quota') || lc.includes('429')) {
       return { code: 'rate_limit', retryable: true };
     }
-    if (lc.includes('auth') || lc.includes('permission')) {
+    if (lc.includes('auth') || lc.includes('api_key') || lc.includes('401')) {
       return { code: 'auth_expired', retryable: false };
     }
     if (lc.includes('context') || lc.includes('token')) {
       return { code: 'context_too_large', retryable: false };
     }
-    if (lc.includes('network') || lc.includes('fetch')) {
+    if (lc.includes('network') || lc.includes('connection')) {
       return { code: 'network_error', retryable: true };
     }
-    if (lc.includes('timeout') || lc.includes('deadline')) {
+    if (lc.includes('timeout')) {
       return { code: 'timeout', retryable: true };
     }
   }
@@ -45,7 +42,7 @@ export function classifyGeminiError(input: GeminiErrorInput): Classification {
   return { code: 'unknown' };
 }
 
-export function classifyGeminiExit(
+export function classifyPiExit(
   exitCode: number | null,
   stderr: string,
 ): { code: CoderErrorCode; retryable?: boolean } | undefined {

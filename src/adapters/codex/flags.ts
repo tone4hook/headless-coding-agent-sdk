@@ -7,28 +7,45 @@ import type { RunOpts, SharedStartOpts } from '../../types.js';
 
 export interface BuildCodexArgvInput {
   opts: SharedStartOpts & RunOpts;
+  /** Resume an existing Codex session by id. */
+  resumeId?: string;
+  /** Resume the latest Codex session for this cwd. */
+  resumeLatest?: boolean;
   outputSchemaPath?: string;
 }
 
 const CLAUDE_ONLY_FIELDS = [
   'permissionMode',
   'settingSources',
+  'isolation',
   'forkSession',
   'systemPrompt',
   'appendSystemPrompt',
   'agents',
   'maxBudgetUsd',
+  'claudeBare',
+  'claudeNoSessionPersistence',
 ] as const;
 
-const GEMINI_ONLY_FIELDS = [
-  'approvalMode',
-  'yolo',
-  'sandbox',
-  'policyFiles',
-  'adminPolicyFiles',
-  'extensions',
-  'includeDirectories',
-  'allowedMcpServerNames',
+const COPILOT_ONLY_FIELDS = [
+  'copilotMode',
+  'copilotAgent',
+  'copilotAllowUrls',
+  'copilotDenyUrls',
+  'copilotAvailableTools',
+  'copilotExcludedTools',
+  'copilotAdditionalMcpConfig',
+] as const;
+
+const PI_ONLY_FIELDS = [
+  'piProvider',
+  'piModels',
+  'piNoSession',
+  'piSessionDir',
+  'piNoContextFiles',
+  'piNoExtensions',
+  'piNoSkills',
+  'piNoPromptTemplates',
 ] as const;
 
 function tomlString(value: string): string {
@@ -36,9 +53,13 @@ function tomlString(value: string): string {
 }
 
 export function buildCodexArgv(input: BuildCodexArgvInput): string[] {
-  const { opts, outputSchemaPath } = input;
+  const { opts, resumeId, resumeLatest, outputSchemaPath } = input;
 
-  for (const field of [...CLAUDE_ONLY_FIELDS, ...GEMINI_ONLY_FIELDS]) {
+  for (const field of [
+    ...CLAUDE_ONLY_FIELDS,
+    ...COPILOT_ONLY_FIELDS,
+    ...PI_ONLY_FIELDS,
+  ]) {
     if ((opts as Record<string, unknown>)[field] !== undefined) {
       throw new FeatureNotSupportedError(
         'codex',
@@ -48,11 +69,12 @@ export function buildCodexArgv(input: BuildCodexArgvInput): string[] {
     }
   }
 
-  if (opts.tools && opts.tools.length > 0) {
+  const reasoningEffort = opts.codexReasoningEffort ?? opts.reasoningEffort;
+  if (reasoningEffort === 'max') {
     throw new FeatureNotSupportedError(
       'codex',
-      'tools',
-      'Codex exec does not support the SDK MCP bridge in this adapter yet.',
+      'reasoningEffort',
+      'Codex exec supports none, minimal, low, medium, high, and xhigh.',
     );
   }
 
@@ -93,14 +115,10 @@ export function buildCodexArgv(input: BuildCodexArgvInput): string[] {
     opts.permissionPolicy?.mode === 'bypass'
   ) {
     argv.push('--dangerously-bypass-approvals-and-sandbox');
-  } else {
-    argv.push('--full-auto');
-  }
-
-  if (opts.permissionPolicy?.mode === 'plan') {
+  } else if (opts.permissionPolicy?.mode === 'plan') {
     argv.push('--sandbox', 'read-only');
-  } else if (opts.codexSandbox) {
-    argv.push('--sandbox', opts.codexSandbox);
+  } else {
+    argv.push('--sandbox', opts.codexSandbox ?? 'workspace-write');
   }
 
   if (opts.codexDisablePlugins) argv.push('--disable', 'plugins');
@@ -109,8 +127,8 @@ export function buildCodexArgv(input: BuildCodexArgvInput): string[] {
   if (opts.codexIgnoreUserConfig) argv.push('--ignore-user-config');
   if (opts.codexIgnoreRules) argv.push('--ignore-rules');
 
-  if (opts.codexReasoningEffort) {
-    argv.push('-c', `model_reasoning_effort=${tomlString(opts.codexReasoningEffort)}`);
+  if (reasoningEffort) {
+    argv.push('-c', `model_reasoning_effort=${tomlString(reasoningEffort)}`);
   }
 
   if (opts.codexNetworkAccess !== undefined) {
@@ -122,6 +140,12 @@ export function buildCodexArgv(input: BuildCodexArgvInput): string[] {
 
   if (outputSchemaPath) argv.push('--output-schema', outputSchemaPath);
   if (opts.maxTurns !== undefined) argv.push('-c', `model_turn_limit=${opts.maxTurns}`);
+
+  if (resumeId || resumeLatest) {
+    argv.push('resume');
+    if (resumeLatest) argv.push('--last');
+    else if (resumeId) argv.push(resumeId);
+  }
 
   argv.push('-');
   return argv;

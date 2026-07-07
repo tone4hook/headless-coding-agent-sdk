@@ -1,9 +1,11 @@
-import { describe, it, expectTypeOf } from 'vitest';
+import { describe, expectTypeOf, it } from 'vitest';
 import type {
   CoderStreamEvent,
   ExtraFor,
   HeadlessCoder,
+  Provider,
   ProviderExtras,
+  ReasoningEffort,
   RunResult,
   SharedStartOpts,
   ThreadHandle,
@@ -17,11 +19,18 @@ import {
 } from '../src/errors.js';
 
 describe('type surface', () => {
-  it('narrows ThreadHandle.provider to the literal', () => {
-    type ClaudeThread = ThreadHandle<'claude'>;
-    type GeminiThread = ThreadHandle<'gemini'>;
-    expectTypeOf<ClaudeThread['provider']>().toEqualTypeOf<'claude'>();
-    expectTypeOf<GeminiThread['provider']>().toEqualTypeOf<'gemini'>();
+  it('narrows provider and thread literals to the supported provider set', () => {
+    expectTypeOf<Provider>().toEqualTypeOf<
+      'claude' | 'codex' | 'copilot' | 'pi'
+    >();
+    expectTypeOf<ThreadHandle<'claude'>['provider']>().toEqualTypeOf<'claude'>();
+    expectTypeOf<ThreadHandle<'pi'>['provider']>().toEqualTypeOf<'pi'>();
+  });
+
+  it('exposes the shared reasoning effort levels', () => {
+    expectTypeOf<ReasoningEffort>().toEqualTypeOf<
+      'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+    >();
   });
 
   it('narrows CoderStreamEvent by provider literal so extras are discoverable', () => {
@@ -29,46 +38,32 @@ describe('type surface', () => {
       CoderStreamEvent<'claude'>,
       { type: 'tool_use' }
     >;
-    type GeminiToolUse = Extract<
-      CoderStreamEvent<'gemini'>,
+    type CopilotToolUse = Extract<
+      CoderStreamEvent<'copilot'>,
       { type: 'tool_use' }
     >;
 
-    // Claude extra has `parentToolUseId` per findings.md.
     expectTypeOf<ClaudeToolUse['extra']>().toMatchTypeOf<
       | { parentToolUseId?: string | null; eventUuid?: string }
       | undefined
     >();
-
-    // Gemini extra has `timestamp`.
-    expectTypeOf<GeminiToolUse['extra']>().toMatchTypeOf<
-      { timestamp?: string } | undefined
-    >();
-
-    // Cross-provider assignment is a compile error in real use (no keys in common
-    // means undefined | {} | undefined — we assert the shapes are distinct by
-    // checking a field that only exists on one side).
-    type ClaudeInitExtra = Extract<
-      CoderStreamEvent<'claude'>,
-      { type: 'init' }
-    >['extra'];
-    expectTypeOf<ClaudeInitExtra>().toMatchTypeOf<
-      { claudeCodeVersion?: string } | undefined
+    expectTypeOf<CopilotToolUse['extra']>().toMatchTypeOf<
+      { sessionId?: string } | undefined
     >();
   });
 
   it('ExtraFor helper returns correct shape per pair', () => {
     type ClaudeInit = ExtraFor<'claude', 'init'>;
-    type GeminiInit = ExtraFor<'gemini', 'init'>;
+    type PiInit = ExtraFor<'pi', 'init'>;
     expectTypeOf<ClaudeInit>().toEqualTypeOf<ProviderExtras['claude']['init']>();
-    expectTypeOf<GeminiInit>().toEqualTypeOf<ProviderExtras['gemini']['init']>();
+    expectTypeOf<PiInit>().toEqualTypeOf<ProviderExtras['pi']['init']>();
   });
 
-  it('RunResult.provider is narrowed by type parameter', () => {
+  it('RunResult.provider and events are narrowed by type parameter', () => {
     expectTypeOf<RunResult<'claude'>['provider']>().toEqualTypeOf<'claude'>();
-    expectTypeOf<RunResult<'gemini'>['provider']>().toEqualTypeOf<'gemini'>();
-    expectTypeOf<RunResult<'claude'>['events']>().toEqualTypeOf<
-      CoderStreamEvent<'claude'>[]
+    expectTypeOf<RunResult<'copilot'>['provider']>().toEqualTypeOf<'copilot'>();
+    expectTypeOf<RunResult<'pi'>['events']>().toEqualTypeOf<
+      CoderStreamEvent<'pi'>[]
     >();
   });
 
@@ -77,25 +72,21 @@ describe('type surface', () => {
       Awaited<ReturnType<HeadlessCoder<'claude'>['startThread']>>['provider']
     >().toEqualTypeOf<'claude'>();
     expectTypeOf<
-      Awaited<ReturnType<HeadlessCoder<'gemini'>['startThread']>>['provider']
-    >().toEqualTypeOf<'gemini'>();
+      Awaited<ReturnType<HeadlessCoder<'codex'>['startThread']>>['provider']
+    >().toEqualTypeOf<'codex'>();
   });
 
   it('SharedStartOpts carries per-provider optional extras', () => {
-    // All fields optional — an empty opts is valid.
     const _empty: SharedStartOpts = {};
+    const _claudeOnly: SharedStartOpts = { permissionMode: 'manual' };
+    const _copilotOnly: SharedStartOpts = { copilotMode: 'plan' };
+    const _piOnly: SharedStartOpts = { piNoSkills: true };
+    const _codexOnly: SharedStartOpts = { codexSandbox: 'workspace-write' };
 
-    // Claude-only field is accepted on the shared type.
-    const _claudeOnly: SharedStartOpts = { permissionMode: 'plan' };
-
-    // Gemini-only field is accepted on the shared type.
-    const _geminiOnly: SharedStartOpts = { yolo: true };
-
-    // Adapter-level rejection of the wrong provider's field happens at runtime
-    // (buildClaudeArgv / buildGeminiArgv throw FeatureNotSupportedError). The
-    // schema itself unifies — do not subtract per principle.
     expectTypeOf<SharedStartOpts['permissionMode']>().toBeNullable();
-    expectTypeOf<SharedStartOpts['yolo']>().toBeNullable();
+    expectTypeOf<SharedStartOpts['copilotMode']>().toBeNullable();
+    expectTypeOf<SharedStartOpts['piNoSkills']>().toBeNullable();
+    expectTypeOf<SharedStartOpts['codexSandbox']>().toBeNullable();
   });
 });
 
@@ -103,9 +94,9 @@ describe('error hierarchy', () => {
   it('all error classes inherit CoderError', () => {
     const errors = [
       new CliNotFoundError('claude', 'claude'),
-      new CliVersionError('gemini', '0.1.0', '0.38.0'),
-      new FeatureNotSupportedError('gemini', 'outputSchema', 'Claude-only'),
-      new CliExitError('claude', 1, null, 'boom'),
+      new CliVersionError('copilot', '0.1.0', '1.0.68'),
+      new FeatureNotSupportedError('pi', 'tools', 'custom tools unavailable'),
+      new CliExitError('codex', 1, null, 'boom'),
     ];
     for (const e of errors) {
       expectTypeOf(e).toMatchTypeOf<CoderError>();
@@ -113,8 +104,8 @@ describe('error hierarchy', () => {
   });
 
   it('CoderError carries code and optional provider', () => {
-    const e = new CoderError('X', 'msg', 'claude');
+    const e = new CoderError('UNKNOWN_PROVIDER', 'msg', 'claude');
     expectTypeOf(e.code).toEqualTypeOf<string>();
-    expectTypeOf(e.provider).toEqualTypeOf<'claude' | 'gemini' | undefined>();
+    expectTypeOf(e.provider).toEqualTypeOf<Provider | undefined>();
   });
 });

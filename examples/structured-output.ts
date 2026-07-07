@@ -1,9 +1,9 @@
 /**
- * Live example: outputSchema round-trip on both adapters.
+ * Live example: outputSchema round-trip.
  *
  * Claude: native --json-schema flag validates server-side.
- * Gemini: prompt-injection best-effort; strictSchema:true throws
- * FeatureNotSupportedError at argv-build time.
+ * Copilot/Pi: prompt-injection best-effort; strictSchema:true throws
+ * FeatureNotSupportedError before spawn.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -41,20 +41,31 @@ describe.skipIf(!hasBin('claude'))('live: claude structured output', () => {
   }, 60_000);
 });
 
-describe.skipIf(!hasBin('gemini'))('live: gemini structured output', () => {
+describe.skipIf(!hasBin('copilot'))('live: copilot structured output', () => {
   it('best-effort returns JSON via prompt injection', async () => {
-    const coder = createCoder('gemini', { yolo: true });
+    const coder = createCoder('copilot');
     const thread = await coder.startThread();
     const result = await thread.run('What is 2+2?', {
       outputSchema: schema,
     });
     await thread.close();
     expect(result.text).toBeDefined();
-    // json may or may not parse depending on whether gemini honored the preamble
+    // json may or may not parse depending on whether the CLI honored the preamble.
   }, 120_000);
 
-  it('strictSchema:true throws FeatureNotSupportedError', async () => {
-    const coder = createCoder('gemini');
+  it('strictSchema:true throws FeatureNotSupportedError before spawn', async () => {
+    const coder = createCoder('copilot');
+    const thread = await coder.startThread();
+    await expect(
+      thread.run('hi', { outputSchema: schema, strictSchema: true }),
+    ).rejects.toThrow(FeatureNotSupportedError);
+    await thread.close();
+  });
+});
+
+describe('pi structured output support', () => {
+  it('strictSchema:true throws FeatureNotSupportedError before spawn', async () => {
+    const coder = createCoder('pi');
     const thread = await coder.startThread();
     await expect(
       thread.run('hi', { outputSchema: schema, strictSchema: true }),

@@ -1,7 +1,7 @@
 /**
  * AdapterSpec — the per-provider seam that GenericThread runs against.
  *
- * Each adapter (claude, gemini, …) exports a single AdapterSpec value
+ * Each adapter (claude, codex, copilot, pi) exports a single AdapterSpec value
  * describing how to (a) translate shared opts into argv, (b) translate
  * raw stdout lines into CoderStreamEvents, (c) register the in-process
  * MCP bridge with the underlying CLI, and (d) decide which assistant

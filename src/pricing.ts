@@ -29,10 +29,6 @@ export const MODEL_PRICING: Readonly<Record<string, ModelPricing>> = {
   // OpenAI Codex / GPT (representative — consumers should override if needed).
   'gpt-5': { inputPerMTok: 1.25, outputPerMTok: 10 },
   'gpt-5-mini': { inputPerMTok: 0.25, outputPerMTok: 2 },
-
-  // Google Gemini.
-  'gemini-2.5-pro': { inputPerMTok: 1.25, outputPerMTok: 10, cacheReadPerMTok: 0.31 },
-  'gemini-2.5-flash': { inputPerMTok: 0.3, outputPerMTok: 2.5, cacheReadPerMTok: 0.075 },
 };
 
 function findPricing(model: string): ModelPricing | undefined {

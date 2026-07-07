@@ -1,7 +1,7 @@
 {
   "name": "@tone4hook/headless-coding-agent-sdk",
   "version": "0.4.0",
-  "description": "TypeScript SDK that unifies headless coding-agent CLI binaries (claude, gemini, codex) behind one I/O schema.",
+  "description": "TypeScript SDK that unifies headless coding-agent CLI binaries (claude, codex, copilot, pi) behind one I/O schema.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -22,13 +22,17 @@
       "types": "./dist/adapters/claude/index.d.ts",
       "import": "./dist/adapters/claude/index.js"
     },
-    "./gemini": {
-      "types": "./dist/adapters/gemini/index.d.ts",
-      "import": "./dist/adapters/gemini/index.js"
-    },
     "./codex": {
       "types": "./dist/adapters/codex/index.d.ts",
       "import": "./dist/adapters/codex/index.js"
+    },
+    "./copilot": {
+      "types": "./dist/adapters/copilot/index.d.ts",
+      "import": "./dist/adapters/copilot/index.js"
+    },
+    "./pi": {
+      "types": "./dist/adapters/pi/index.d.ts",
+      "import": "./dist/adapters/pi/index.js"
     },
     "./worktree": {
       "types": "./dist/worktree/index.d.ts",

@@ -1,0 +1,5 @@
+{"type":"session","version":3,"id":"pi-session-1","timestamp":"2026-07-07T00:00:00.000Z","cwd":"/repo","model":"sonnet"}
+{"type":"message_update","message_id":"msg-1","text":"Hel"}
+{"type":"message_end","message_id":"msg-1","text":"Hello from Pi."}
+{"type":"turn_end","usage":{"input_tokens":2,"output_tokens":3}}
+{"type":"agent_end","status":"success"}

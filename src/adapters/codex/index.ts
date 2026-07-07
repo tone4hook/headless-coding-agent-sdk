@@ -6,8 +6,14 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import type { HeadlessCoder, SharedStartOpts } from '../../types.js';
+import type { HttpMcpBridge } from '../../tools/bridge.js';
 import { createCoderFromSpec } from '../shared/thread.js';
-import type { AdapterSpec, BuildArgvCtx, PreparedRun } from '../shared/spec.js';
+import type {
+  AdapterSpec,
+  BuildArgvCtx,
+  McpHandshake,
+  PreparedRun,
+} from '../shared/spec.js';
 import { buildCodexArgv } from './flags.js';
 import { translateCodexLine } from './translate.js';
 
@@ -23,6 +29,8 @@ async function prepareCodexRun(ctx: BuildArgvCtx): Promise<PreparedRun> {
 
   const argv = buildCodexArgv({
     opts: ctx.opts,
+    resumeId: ctx.resumeId,
+    resumeLatest: ctx.resumeLatest,
     outputSchemaPath,
   });
 
@@ -45,13 +53,40 @@ async function prepareCodexRun(ctx: BuildArgvCtx): Promise<PreparedRun> {
   };
 }
 
+function tomlString(value: string): string {
+  return JSON.stringify(value);
+}
+
+async function registerCodexMcp(bridge: HttpMcpBridge): Promise<McpHandshake> {
+  const key = `mcp_servers.${bridge.serverName}`;
+  return {
+    argv: [
+      '-c',
+      `${key}.url=${tomlString(bridge.url)}`,
+      '-c',
+      `${key}.enabled=true`,
+      '-c',
+      `${key}.required=true`,
+      '-c',
+      `${key}.default_tools_approval_mode=${tomlString('approve')}`,
+    ],
+    cleanup: async () => undefined,
+  };
+}
+
 export const codexSpec: AdapterSpec<'codex'> = {
   provider: 'codex',
   bin: 'codex',
   promptTransport: 'stdin',
-  buildArgv: (ctx) => buildCodexArgv({ opts: ctx.opts }),
+  buildArgv: (ctx) =>
+    buildCodexArgv({
+      opts: ctx.opts,
+      resumeId: ctx.resumeId,
+      resumeLatest: ctx.resumeLatest,
+    }),
   prepareRun: prepareCodexRun,
   translateLine: translateCodexLine,
+  registerMcp: registerCodexMcp,
   shouldAccumulateText: (ev) =>
     ev.type === 'message' && ev.role === 'assistant' && !ev.delta,
 };

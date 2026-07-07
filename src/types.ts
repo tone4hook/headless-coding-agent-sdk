@@ -8,7 +8,16 @@
  * adapter(s) that honor it.
  */
 
-export type Provider = 'claude' | 'gemini' | 'codex';
+export type Provider = 'claude' | 'codex' | 'copilot' | 'pi';
+
+export type ReasoningEffort =
+  | 'none'
+  | 'minimal'
+  | 'low'
+  | 'medium'
+  | 'high'
+  | 'xhigh'
+  | 'max';
 
 export type PromptInput =
   | string
@@ -101,21 +110,21 @@ export type PermissionDecision =
   | { decision: 'denied'; reason?: string };
 
 /**
- * Static permission policy mapped to each CLI's native flags.
+ * Static permission policy mapped to each CLI's native flags where possible.
  * Live interactive callbacks are deferred (see findings.md).
  */
 export interface PermissionPolicy {
   /**
    * Coarse mode applied to all tool use.
    *  - `default`: CLI's default behavior (typically interactive prompt — unused in headless)
-   *  - `accept-edits`: auto-approve file edits (Claude `acceptEdits`, Gemini `auto_edit`)
-   *  - `plan`: read-only planning mode (Claude `plan`, Gemini `plan`)
-   *  - `bypass`: approve everything (Claude `bypassPermissions`, Gemini `yolo`)
+   *  - `accept-edits`: auto-approve file edits where the CLI supports it
+   *  - `plan`: read-only or planning-oriented mode where the CLI supports it
+   *  - `bypass`: approve everything where the CLI supports it
    */
   mode?: 'default' | 'accept-edits' | 'plan' | 'bypass';
   /** Tool names to always allow without prompt. */
   allow?: string[];
-  /** Tool names to always deny. (Claude only; Gemini uses policy engine.) */
+  /** Tool names to always deny where the adapter exposes native deny flags. */
   deny?: string[];
 }
 
@@ -124,17 +133,19 @@ export interface PermissionPolicy {
 // ---------------------------------------------------------------------------
 
 export interface SharedStartOpts {
-  /** Model name or alias. Both adapters. */
+  /** Model name or alias. All adapters. */
   model?: string;
-  /** CWD for the CLI subprocess. Both adapters. */
+  /** Shared reasoning/thinking effort. Adapters throw when a level is unsupported. */
+  reasoningEffort?: ReasoningEffort;
+  /** CWD for the CLI subprocess. All adapters. */
   workingDirectory?: string;
-  /** Pre-allowlisted tool names. Both adapters (distinct flag names). */
+  /** Pre-allowlisted tool names. Adapters map this to native tool permission flags. */
   allowedTools?: string[];
-  /** Custom tools surfaced via the in-process MCP bridge. Both adapters. */
+  /** Custom tools surfaced via the in-process MCP bridge where supported. */
   tools?: ToolDefinition<any>[];
-  /** Static permission policy — mapped per-adapter to native flags. Both adapters. */
+  /** Static permission policy — mapped per-adapter to native flags. */
   permissionPolicy?: PermissionPolicy;
-  /** Extra env vars for the spawned CLI. Both adapters. */
+  /** Extra env vars for the spawned CLI. All adapters. */
   extraEnv?: Record<string, string>;
   /**
    * Sanitize the host env before spawn — strip noisy host vars
@@ -152,10 +163,10 @@ export interface SharedStartOpts {
    * stripping requires this explicit list. Common use: remove stale auth env
    * (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_USE_BEDROCK`,
    * `CLAUDE_CODE_USE_VERTEX`) to force the CLI's OAuth / keychain fallback.
-   * Both adapters.
+   * All adapters.
    */
   unsetEnv?: string[];
-  /** Debug hook — invoked for every raw stdout line before translation. Both adapters. */
+  /** Debug hook — invoked for every raw stdout line before translation. All adapters. */
   onRawLine?: (line: string) => void;
 
   // --- Claude-only extras ---
@@ -166,6 +177,7 @@ export interface SharedStartOpts {
     | 'auto'
     | 'bypassPermissions'
     | 'dontAsk'
+    | 'manual'
     | 'plan';
   /** @adapter claude — maps to `--setting-sources`. */
   settingSources?: Array<'local' | 'project' | 'user'>;
@@ -195,27 +207,47 @@ export interface SharedStartOpts {
   agents?: Record<string, unknown>;
   /** @adapter claude — maps to `--max-budget-usd`. */
   maxBudgetUsd?: number;
+  /** @adapter claude — maps to `--bare`. */
+  claudeBare?: boolean;
+  /** @adapter claude — maps to `--no-session-persistence`. */
+  claudeNoSessionPersistence?: boolean;
 
-  // --- Gemini-only extras ---
-  /** @adapter gemini — maps to `--approval-mode`. */
-  approvalMode?: 'default' | 'auto_edit' | 'yolo' | 'plan';
-  /** @adapter gemini — maps to `-y/--yolo`. */
-  yolo?: boolean;
-  /** @adapter gemini — maps to `-s/--sandbox`. */
-  sandbox?: boolean;
-  /** @adapter gemini — maps to `--policy`. */
-  policyFiles?: string[];
-  /** @adapter gemini — maps to `--admin-policy`. */
-  adminPolicyFiles?: string[];
-  /** @adapter gemini — maps to `-e/--extensions`. */
-  extensions?: string[];
-  /** @adapter gemini — maps to `--include-directories`. */
-  includeDirectories?: string[];
-  /** @adapter gemini — maps to `--allowed-mcp-server-names`. */
-  allowedMcpServerNames?: string[];
+  // --- Copilot-only extras ---
+  /** @adapter copilot — maps to `--mode`. */
+  copilotMode?: 'interactive' | 'plan' | 'autopilot';
+  /** @adapter copilot — maps to `--agent`. */
+  copilotAgent?: string;
+  /** @adapter copilot — maps to `--allow-url`. */
+  copilotAllowUrls?: string[];
+  /** @adapter copilot — maps to `--deny-url`. */
+  copilotDenyUrls?: string[];
+  /** @adapter copilot — maps to `--available-tools`. */
+  copilotAvailableTools?: string[];
+  /** @adapter copilot — maps to `--excluded-tools`. */
+  copilotExcludedTools?: string[];
+  /** @adapter copilot — maps to `--additional-mcp-config`. */
+  copilotAdditionalMcpConfig?: string[];
+
+  // --- Pi-only extras ---
+  /** @adapter pi — maps to `--provider`. */
+  piProvider?: string;
+  /** @adapter pi — maps to `--models`. */
+  piModels?: string[];
+  /** @adapter pi — maps to `--no-session`. */
+  piNoSession?: boolean;
+  /** @adapter pi — maps to `--session-dir`. */
+  piSessionDir?: string;
+  /** @adapter pi — maps to `--no-context-files`. */
+  piNoContextFiles?: boolean;
+  /** @adapter pi — maps to `--no-extensions`. */
+  piNoExtensions?: boolean;
+  /** @adapter pi — maps to `--no-skills`. */
+  piNoSkills?: boolean;
+  /** @adapter pi — maps to `--no-prompt-templates`. */
+  piNoPromptTemplates?: boolean;
 
   // --- Codex-only extras ---
-  /** @adapter codex — maps to `-c model_reasoning_effort="<value>"`. */
+  /** @adapter codex — maps to `-c model_reasoning_effort="<value>"`. Prefer `reasoningEffort`. */
   codexReasoningEffort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
   /** @adapter codex — maps to `--disable plugins`. */
   codexDisablePlugins?: boolean;
@@ -241,8 +273,9 @@ export interface RunOpts {
   /**
    * JSON Schema for structured output validation.
    *  - Claude: native via `--json-schema`.
-   *  - Gemini: best-effort via prompt injection + `--output-format json`, or
-   *    throws FeatureNotSupportedError when `strictSchema: true`.
+   *  - Codex: native via `--output-schema`.
+   *  - Copilot/Pi: best-effort via prompt injection, or throws
+   *    FeatureNotSupportedError when `strictSchema: true`.
    */
   outputSchema?: JsonSchema;
   /** Throw FeatureNotSupportedError if the adapter cannot honor outputSchema natively. */
@@ -271,7 +304,7 @@ export interface UsageStats {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheCreationTokens?: number;
-  /** Reasoning/thinking tokens billed separately (Codex/Gemini reasoning models). */
+  /** Reasoning/thinking tokens billed separately where reported. */
   reasoningTokens?: number;
   totalTokens?: number;
   /** Best-effort cost. Undefined (not NaN) for unknown models. */
@@ -380,27 +413,63 @@ export interface ProviderExtras {
     cancelled: Record<string, never>;
     stderr: Record<string, never>;
   };
-  gemini: {
+  copilot: {
     init: {
+      sessionId?: string;
+      cwd?: string;
+    };
+    message: {
+      sessionId?: string;
+    };
+    tool_use: {
+      sessionId?: string;
+    };
+    tool_result: {
+      sessionId?: string;
+      status?: string;
+    };
+    progress: {
+      label?: string;
+      rawType?: string;
+    };
+    usage: {
+      raw?: unknown;
+    };
+    done: {
+      terminalReason?: string;
+    };
+    error: Record<string, never>;
+    permission: Record<string, never>;
+    file_change: Record<string, never>;
+    plan_update: Record<string, never>;
+    cancelled: Record<string, never>;
+    stderr: Record<string, never>;
+  };
+  pi: {
+    init: {
+      version?: number;
+      cwd?: string;
       timestamp?: string;
     };
     message: {
       timestamp?: string;
+      messageId?: string;
     };
     tool_use: {
       timestamp?: string;
+      messageId?: string;
     };
     tool_result: {
       timestamp?: string;
-      status?: 'success' | 'error';
+      messageId?: string;
+      status?: string;
     };
     progress: {
       timestamp?: string;
+      rawType?: string;
     };
     usage: {
-      cached?: number;
-      toolCalls?: number;
-      models?: Record<string, UsageStats>;
+      raw?: unknown;
     };
     done: {
       terminalReason?: string;

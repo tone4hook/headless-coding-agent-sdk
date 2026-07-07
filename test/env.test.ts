@@ -34,7 +34,6 @@ describe('sanitizeEnv', () => {
   it('preserves provider auth/proxy/CA vars', () => {
     const parent = {
       ANTHROPIC_API_KEY: 'a',
-      GEMINI_API_KEY: 'g',
       OPENAI_API_KEY: 'o',
       GOOGLE_APPLICATION_CREDENTIALS: '/x',
       HTTPS_PROXY: 'http://proxy',

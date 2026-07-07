@@ -1,45 +1,47 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import {
-  createCoder,
   createClaudeCoder,
+  createCoder,
   createCodexCoder,
-  createGeminiCoder,
+  createCopilotCoder,
+  createPiCoder,
 } from '../src/index.js';
 import type {
+  CoderStreamEvent,
   HeadlessCoder,
   ThreadHandle,
-  CoderStreamEvent,
 } from '../src/index.js';
 
 describe('createCoder', () => {
   it('returns an adapter-typed HeadlessCoder for each provider literal', () => {
     const claude = createCoder('claude');
-    const gemini = createCoder('gemini');
     const codex = createCoder('codex');
+    const copilot = createCoder('copilot');
+    const pi = createCoder('pi');
     expect(claude.provider).toBe('claude');
-    expect(gemini.provider).toBe('gemini');
     expect(codex.provider).toBe('codex');
+    expect(copilot.provider).toBe('copilot');
+    expect(pi.provider).toBe('pi');
     expectTypeOf(claude).toEqualTypeOf<HeadlessCoder<'claude'>>();
-    expectTypeOf(gemini).toEqualTypeOf<HeadlessCoder<'gemini'>>();
     expectTypeOf(codex).toEqualTypeOf<HeadlessCoder<'codex'>>();
+    expectTypeOf(copilot).toEqualTypeOf<HeadlessCoder<'copilot'>>();
+    expectTypeOf(pi).toEqualTypeOf<HeadlessCoder<'pi'>>();
   });
 
-  it('narrows provider literal so ThreadHandle.fork is claude-only-callable at compile time', () => {
+  it('narrows provider literal on thread handles', () => {
     type ClaudeThread = Awaited<
       ReturnType<HeadlessCoder<'claude'>['startThread']>
     >;
-    type GeminiThread = Awaited<
-      ReturnType<HeadlessCoder<'gemini'>['startThread']>
+    type CopilotThread = Awaited<
+      ReturnType<HeadlessCoder<'copilot'>['startThread']>
     >;
-    // Both expose fork? (interface marks it optional); both have provider narrowed.
     expectTypeOf<ClaudeThread['provider']>().toEqualTypeOf<'claude'>();
-    expectTypeOf<GeminiThread['provider']>().toEqualTypeOf<'gemini'>();
+    expectTypeOf<CopilotThread['provider']>().toEqualTypeOf<'copilot'>();
     expectTypeOf<ClaudeThread>().toMatchTypeOf<ThreadHandle<'claude'>>();
-    expectTypeOf<GeminiThread>().toMatchTypeOf<ThreadHandle<'gemini'>>();
+    expectTypeOf<CopilotThread>().toMatchTypeOf<ThreadHandle<'copilot'>>();
   });
 
   it('narrows event extras per provider literal', () => {
-    // Accessing a claude-specific extras field on the claude variant is fine.
     type ClaudeInit = Extract<
       CoderStreamEvent<'claude'>,
       { type: 'init' }
@@ -47,13 +49,10 @@ describe('createCoder', () => {
     expectTypeOf<ClaudeInit['extra']>().toMatchTypeOf<
       { claudeCodeVersion?: string } | undefined
     >();
-    // Gemini init has timestamp, not claudeCodeVersion.
-    type GeminiInit = Extract<
-      CoderStreamEvent<'gemini'>,
-      { type: 'init' }
-    >;
-    expectTypeOf<GeminiInit['extra']>().toMatchTypeOf<
-      { timestamp?: string } | undefined
+
+    type PiInit = Extract<CoderStreamEvent<'pi'>, { type: 'init' }>;
+    expectTypeOf<PiInit['extra']>().toMatchTypeOf<
+      { version?: number; timestamp?: string } | undefined
     >();
   });
 
@@ -62,14 +61,9 @@ describe('createCoder', () => {
   });
 
   it('direct factory exports match the generic entry', () => {
-    const a = createClaudeCoder();
-    const b = createCoder('claude');
-    expect(a.provider).toBe(b.provider);
-    const c = createGeminiCoder();
-    const d = createCoder('gemini');
-    expect(c.provider).toBe(d.provider);
-    const e = createCodexCoder();
-    const f = createCoder('codex');
-    expect(e.provider).toBe(f.provider);
+    expect(createClaudeCoder().provider).toBe(createCoder('claude').provider);
+    expect(createCodexCoder().provider).toBe(createCoder('codex').provider);
+    expect(createCopilotCoder().provider).toBe(createCoder('copilot').provider);
+    expect(createPiCoder().provider).toBe(createCoder('pi').provider);
   });
 });

@@ -5,7 +5,6 @@ import {
   CliVersionError,
   CoderError,
   FeatureNotSupportedError,
-  GeminiBridgeNotLoadedError,
   type ErrorCode,
 } from '../src/errors.js';
 
@@ -20,31 +19,23 @@ describe('errors taxonomy', () => {
   });
 
   it('CliVersionError exposes installed/required', () => {
-    const err = new CliVersionError('gemini', '0.10.0', '0.38.0');
+    const err = new CliVersionError('copilot', '0.10.0', '1.0.68');
     expect(err.code).toBe('CLI_VERSION');
     expect(err.installed).toBe('0.10.0');
-    expect(err.required).toBe('0.38.0');
+    expect(err.required).toBe('1.0.68');
     expect(err.message).toContain('0.10.0');
-    expect(err.message).toContain('0.38.0');
+    expect(err.message).toContain('1.0.68');
   });
 
   it('FeatureNotSupportedError carries feature and optional hint', () => {
-    const bare = new FeatureNotSupportedError('claude', 'yolo');
+    const bare = new FeatureNotSupportedError('pi', 'tools');
     expect(bare.code).toBe('FEATURE_NOT_SUPPORTED');
-    expect(bare.feature).toBe('yolo');
-    expect(bare.message).toContain('yolo');
+    expect(bare.feature).toBe('tools');
+    expect(bare.message).toContain('tools');
     expect(bare.message).not.toMatch(/: $/);
 
-    const hinted = new FeatureNotSupportedError('claude', 'yolo', 'use gemini');
-    expect(hinted.message).toContain('use gemini');
-  });
-
-  it('GeminiBridgeNotLoadedError pins provider to gemini', () => {
-    const err = new GeminiBridgeNotLoadedError('hca-bridge', 'home dropped');
-    expect(err.code).toBe('GEMINI_BRIDGE_NOT_LOADED');
-    expect(err.provider).toBe('gemini');
-    expect(err.mcpServerName).toBe('hca-bridge');
-    expect(err.message).toContain('home dropped');
+    const hinted = new FeatureNotSupportedError('pi', 'tools', 'use copilot');
+    expect(hinted.message).toContain('use copilot');
   });
 
   it('CliExitError captures exitCode, signal, stderr; truncates tail to 3 lines', () => {
@@ -62,7 +53,7 @@ describe('errors taxonomy', () => {
   });
 
   it('CliExitError handles signal-only exits without crashing', () => {
-    const err = new CliExitError('gemini', null, 'SIGTERM', '');
+    const err = new CliExitError('pi', null, 'SIGTERM', '');
     expect(err.exitCode).toBeNull();
     expect(err.signal).toBe('SIGTERM');
     expect(err.message).toContain('SIGTERM');
@@ -71,10 +62,9 @@ describe('errors taxonomy', () => {
   it('all subclasses are instanceof CoderError', () => {
     const errs: CoderError[] = [
       new CliNotFoundError('claude', 'claude'),
-      new CliVersionError('claude', '0', '1'),
-      new FeatureNotSupportedError('claude', 'x'),
-      new GeminiBridgeNotLoadedError('hca-bridge'),
-      new CliExitError('claude', 1, null, ''),
+      new CliVersionError('codex', '0', '1'),
+      new FeatureNotSupportedError('copilot', 'x'),
+      new CliExitError('pi', 1, null, ''),
     ];
     for (const e of errs) expect(e).toBeInstanceOf(CoderError);
   });
@@ -84,16 +74,14 @@ describe('errors taxonomy', () => {
       'CLI_NOT_FOUND',
       'CLI_VERSION',
       'FEATURE_NOT_SUPPORTED',
-      'GEMINI_BRIDGE_NOT_LOADED',
       'CLI_EXIT',
       'UNKNOWN_PROVIDER',
     ];
-    expect(new Set(codes).size).toBe(6);
+    expect(new Set(codes).size).toBe(5);
     expectTypeOf<ErrorCode>().toEqualTypeOf<
       | 'CLI_NOT_FOUND'
       | 'CLI_VERSION'
       | 'FEATURE_NOT_SUPPORTED'
-      | 'GEMINI_BRIDGE_NOT_LOADED'
       | 'CLI_EXIT'
       | 'UNKNOWN_PROVIDER'
     >();
@@ -101,7 +89,6 @@ describe('errors taxonomy', () => {
 
   it('subclass code fields narrow to literals', () => {
     const err = new CliExitError('claude', 1, null, '');
-    // Narrowed literal — non-matching string would be a TS error.
     expectTypeOf(err.code).toEqualTypeOf<'CLI_EXIT'>();
     if (err.code === 'CLI_EXIT') {
       expect(err.exitCode).toBe(1);

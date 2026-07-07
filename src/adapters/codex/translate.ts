@@ -101,10 +101,19 @@ export function translateCodexLine(line: string): CoderStreamEvent<'codex'>[] {
   const sessionId =
     asString(item.session_id) ??
     asString(item.sessionId) ??
+    asString(item.thread_id) ??
+    asString(item.threadId) ??
     asString(payload.session_id) ??
-    asString(payload.sessionId);
+    asString(payload.sessionId) ??
+    asString(payload.thread_id) ??
+    asString(payload.threadId);
 
-  if (type === 'session_configured' || type === 'init' || type === 'started') {
+  if (
+    type === 'thread.started' ||
+    type === 'session_configured' ||
+    type === 'init' ||
+    type === 'started'
+  ) {
     return [
       {
         provider: 'codex',
@@ -119,6 +128,167 @@ export function translateCodexLine(line: string): CoderStreamEvent<'codex'>[] {
         },
       },
     ];
+  }
+
+  if (type === 'turn.started') {
+    return [
+      {
+        provider: 'codex',
+        type: 'progress',
+        label: 'turn_started',
+        ts,
+        originalItem: item,
+        extra: { label: 'turn_started' },
+      },
+    ];
+  }
+
+  if (type === 'item.started') {
+    const itemType = asString(payload.type);
+    if (
+      itemType === 'command_execution' ||
+      itemType === 'mcp_tool_call' ||
+      itemType === 'function_call'
+    ) {
+      const command =
+        asString(payload.command) ??
+        textFromContent(payload.command) ??
+        asString(payload.cmd);
+      return [
+        {
+          provider: 'codex',
+          type: 'tool_use',
+          name:
+            asString(payload.name) ??
+            asString(payload.tool_name) ??
+            itemType,
+          callId:
+            asString(payload.call_id) ??
+            asString(payload.callId) ??
+            asString(payload.id),
+          args:
+            payload.arguments ??
+            payload.args ??
+            payload.input ??
+            (command ? { command } : undefined),
+          ts,
+          originalItem: item,
+          extra: { sessionId },
+        },
+      ];
+    }
+    return [
+      {
+        provider: 'codex',
+        type: 'progress',
+        label: itemType ?? 'item_started',
+        ts,
+        originalItem: item,
+        extra: { label: itemType ?? 'item_started' },
+      },
+    ];
+  }
+
+  if (type === 'item.completed') {
+    const itemType = asString(payload.type);
+    if (itemType === 'agent_message' || itemType === 'message') {
+      const text =
+        asString(payload.text) ??
+        textFromContent(payload.content) ??
+        asString(item.text) ??
+        textFromContent(item.content);
+      return text
+        ? [
+            {
+              provider: 'codex',
+              type: 'message',
+              role: asString(payload.role) === 'user' ? 'user' : 'assistant',
+              text,
+              ts,
+              originalItem: item,
+              extra: { sessionId },
+            },
+          ]
+        : [];
+    }
+
+    if (itemType === 'reasoning') {
+      const text =
+        asString(payload.text) ??
+        asString(payload.summary) ??
+        textFromContent(payload.content);
+      return [
+        {
+          provider: 'codex',
+          type: 'progress',
+          label: 'reasoning',
+          detail: text,
+          ts,
+          originalItem: item,
+          extra: { label: 'reasoning' },
+        },
+      ];
+    }
+
+    if (
+      itemType === 'command_execution' ||
+      itemType === 'mcp_tool_call' ||
+      itemType === 'function_call_output'
+    ) {
+      return [
+        {
+          provider: 'codex',
+          type: 'tool_result',
+          name:
+            asString(payload.name) ??
+            asString(payload.tool_name) ??
+            itemType,
+          callId:
+            asString(payload.call_id) ??
+            asString(payload.callId) ??
+            asString(payload.id),
+          result:
+            payload.output ??
+            payload.aggregated_output ??
+            payload.result ??
+            payload.content ??
+            payload,
+          error: payload.error,
+          ts,
+          originalItem: item,
+          extra: {
+            sessionId,
+            status: asString(payload.status),
+          },
+        },
+      ];
+    }
+
+    if (itemType === 'file_change') {
+      return [
+        {
+          provider: 'codex',
+          type: 'file_change',
+          path: asString(payload.path),
+          op: asString(payload.op) as 'create' | 'modify' | 'delete' | 'rename' | undefined,
+          patch: asString(payload.patch),
+          ts,
+          originalItem: item,
+        },
+      ];
+    }
+
+    if (itemType === 'plan_update') {
+      return [
+        {
+          provider: 'codex',
+          type: 'plan_update',
+          text: asString(payload.text) ?? textFromContent(payload.content),
+          ts,
+          originalItem: item,
+        },
+      ];
+    }
   }
 
   if (
@@ -214,7 +384,15 @@ export function translateCodexLine(line: string): CoderStreamEvent<'codex'>[] {
     ];
   }
 
-  if (type === 'usage' || payload.usage) {
+  if (
+    (type === 'usage' || payload.usage) &&
+    type !== 'done' &&
+    type !== 'turn.completed' &&
+    type !== 'turn.failed' &&
+    type !== 'turn_completed' &&
+    type !== 'completed' &&
+    type !== 'turn_aborted'
+  ) {
     const stats = usageFrom(payload.usage ?? payload);
     if (stats && stats.costUsd === undefined) {
       stats.costUsd = estimateCostUsd(asString(item.model) ?? asString(payload.model), stats);
@@ -257,6 +435,8 @@ export function translateCodexLine(line: string): CoderStreamEvent<'codex'>[] {
 
   if (
     type === 'done' ||
+    type === 'turn.completed' ||
+    type === 'turn.failed' ||
     type === 'turn_completed' ||
     type === 'completed' ||
     type === 'turn_aborted'
@@ -286,6 +466,30 @@ export function translateCodexLine(line: string): CoderStreamEvent<'codex'>[] {
         code: 'interrupted',
         ts,
         originalItem: item,
+      });
+    } else if (type === 'turn.failed') {
+      const message =
+        asString(item.message) ??
+        asString(payload.message) ??
+        asString(item.error) ??
+        asString(payload.error) ??
+        'Codex turn failed';
+      const c = classifyCodexError({ message });
+      events.push({
+        provider: 'codex',
+        type: 'error',
+        code: c.code,
+        retryable: c.retryable,
+        message,
+        ts,
+        originalItem: item,
+      });
+      events.push({
+        provider: 'codex',
+        type: 'done',
+        ts,
+        originalItem: item,
+        extra: { terminalReason: 'error' },
       });
     } else {
       events.push({

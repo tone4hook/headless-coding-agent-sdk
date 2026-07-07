@@ -1,14 +1,15 @@
 /**
  * Public API — headless-coding-agent-sdk
  *
- * Unified TypeScript SDK wrapping the `claude` and `gemini` CLI binaries
- * in headless mode. Subprocess-only; no vendor JS SDK dependencies.
+ * Unified TypeScript SDK wrapping coding-agent CLIs in headless mode.
+ * Subprocess-only; no vendor JS SDK dependencies.
  */
 
 export { createCoder } from './factory.js';
 export { createClaudeCoder } from './adapters/claude/index.js';
-export { createGeminiCoder } from './adapters/gemini/index.js';
 export { createCodexCoder } from './adapters/codex/index.js';
+export { createCopilotCoder } from './adapters/copilot/index.js';
+export { createPiCoder } from './adapters/pi/index.js';
 
 export {
   tool,
@@ -31,12 +32,12 @@ export {
   CliVersionError,
   FeatureNotSupportedError,
   CliExitError,
-  GeminiBridgeNotLoadedError,
 } from './errors.js';
 export type { ErrorCode } from './errors.js';
 
 export type {
   Provider,
+  ReasoningEffort,
   PromptInput,
   SharedStartOpts,
   RunOpts,

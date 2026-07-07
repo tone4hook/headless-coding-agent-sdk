@@ -1,7 +1,7 @@
 /**
  * Maps shared StartOpts + RunOpts to `claude` CLI argv.
  *
- * Verified against claude CLI 2.1.118 (`claude --help`). Gemini-only
+ * Verified against claude CLI 2.1.202 (`claude --help`). Other-adapter
  * fields throw FeatureNotSupportedError rather than silently dropping —
  * callers learn at call time which adapter they're actually on.
  */
@@ -35,34 +35,58 @@ export interface BuildClaudeArgvInput {
   mcpConfigPath?: string;
 }
 
-const GEMINI_ONLY_FIELDS = [
-  'yolo',
-  'sandbox',
-  'approvalMode',
-  'policyFiles',
-  'adminPolicyFiles',
-  'extensions',
-  'includeDirectories',
-  'allowedMcpServerNames',
+const OTHER_ADAPTER_FIELDS = [
+  'codexReasoningEffort',
+  'codexDisablePlugins',
+  'codexSandbox',
+  'codexNetworkAccess',
+  'codexSearch',
+  'codexEphemeral',
+  'codexIgnoreUserConfig',
+  'codexIgnoreRules',
+  'codexDangerouslyBypassApprovalsAndSandbox',
+  'copilotMode',
+  'copilotAgent',
+  'copilotAllowUrls',
+  'copilotDenyUrls',
+  'copilotAvailableTools',
+  'copilotExcludedTools',
+  'copilotAdditionalMcpConfig',
+  'piProvider',
+  'piModels',
+  'piNoSession',
+  'piSessionDir',
+  'piNoContextFiles',
+  'piNoExtensions',
+  'piNoSkills',
+  'piNoPromptTemplates',
 ] as const;
 
 export function buildClaudeArgv(input: BuildClaudeArgvInput): string[] {
   const { opts, resumeId, continueLatest, mcpConfigPath } = input;
 
-  // Reject Gemini-only fields up front.
-  for (const field of GEMINI_ONLY_FIELDS) {
+  for (const field of OTHER_ADAPTER_FIELDS) {
     if ((opts as Record<string, unknown>)[field] !== undefined) {
       throw new FeatureNotSupportedError(
         'claude',
         field,
-        `Field "${field}" is a Gemini-only option; use the gemini adapter or remove it.`,
+        `Field "${field}" is not supported by the claude adapter.`,
       );
     }
+  }
+
+  if (opts.reasoningEffort === 'none' || opts.reasoningEffort === 'minimal') {
+    throw new FeatureNotSupportedError(
+      'claude',
+      'reasoningEffort',
+      'Claude Code --effort supports low, medium, high, xhigh, and max.',
+    );
   }
 
   const argv: string[] = ['-p', '--output-format', 'stream-json', '--verbose'];
 
   if (opts.model) argv.push('--model', opts.model);
+  if (opts.reasoningEffort) argv.push('--effort', opts.reasoningEffort);
 
   if (opts.allowedTools && opts.allowedTools.length > 0) {
     argv.push('--allowed-tools', ...opts.allowedTools);
@@ -99,6 +123,9 @@ export function buildClaudeArgv(input: BuildClaudeArgvInput): string[] {
 
   if (opts.maxBudgetUsd !== undefined)
     argv.push('--max-budget-usd', String(opts.maxBudgetUsd));
+
+  if (opts.claudeBare) argv.push('--bare');
+  if (opts.claudeNoSessionPersistence) argv.push('--no-session-persistence');
 
   if (opts.outputSchema) {
     argv.push('--json-schema', JSON.stringify(opts.outputSchema));

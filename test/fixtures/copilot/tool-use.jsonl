@@ -1,0 +1,2 @@
+{"type":"tool_execution_start","id":"call-1","name":"shell","input":{"command":"git status"}}
+{"type":"tool_execution_end","id":"call-1","name":"shell","output":"clean","status":"success"}

@@ -2,7 +2,8 @@
  * Live example: register a custom tool and verify the CLI calls it.
  *
  * Note: Claude CLI requires the tool's mcp-qualified name in `allowedTools`
- * or permissionMode=bypassPermissions. Gemini with `-y` bypasses approval.
+ * or permissionMode=bypassPermissions. Copilot can use --allow-tool via
+ * `allowedTools` / `permissionPolicy.allow`.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -44,9 +45,12 @@ describe.skipIf(!hasBin('claude'))('live: claude custom tools', () => {
   }, 120_000);
 });
 
-describe.skipIf(!hasBin('gemini'))('live: gemini custom tools', () => {
+describe.skipIf(!hasBin('copilot'))('live: copilot custom tools', () => {
   it('invokes the registered `add` tool', async () => {
-    const coder = createCoder('gemini', { tools: [addTool], yolo: true });
+    const coder = createCoder('copilot', {
+      tools: [addTool],
+      permissionPolicy: { allow: ['sdk_bridge_*'] },
+    });
     const thread = await coder.startThread();
     let toolInvoked = false;
     for await (const ev of thread.runStreamed('Use the add tool to compute 17 + 25.')) {

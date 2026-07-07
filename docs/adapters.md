@@ -1,69 +1,68 @@
 # Adapter coverage
 
-Per-field mapping of `SharedStartOpts` and `RunOpts` to each CLI, verified
-against `claude 2.1.118`, `gemini 0.38.2`, and `codex-cli 0.128.0`.
+Per-field mapping of `SharedStartOpts` and `RunOpts` to each CLI, checked
+against current stable docs and local binaries:
 
-Legend: ✅ native · ⚠️ best-effort · ❌ `FeatureNotSupportedError`.
+- Claude Code `2.1.202`
+- Codex CLI `0.142.5`
+- GitHub Copilot CLI `1.0.68`
+- Pi coding agent `0.80.3`
 
-## `SharedStartOpts` — universal fields
+Legend: ✅ native · ⚠️ best-effort/partial · ❌ `FeatureNotSupportedError`.
 
-| Field | Claude | Gemini | Codex |
-|---|---|---|---|
-| `model` | ✅ `--model` | ✅ `-m` | ✅ `--model` |
-| `workingDirectory` | ✅ `cwd` | ✅ `cwd` | ✅ `-C` (also `cwd`) |
-| `addDirs` | ✅ `--add-dir` | ❌ | ✅ `--add-dir` |
-| `allowedTools` | ✅ `--allowed-tools` | ✅ `--allowed-tools` (deprecated) | ❌ |
-| `tools` (custom) | ✅ MCP bridge via `--mcp-config` | ✅ MCP bridge via ephemeral `GEMINI_CLI_HOME` | ❌ no MCP bridge |
-| `permissionPolicy.mode` | ✅ → `--permission-mode` | ✅ → `--approval-mode` | ⚠️ see below |
-| `permissionPolicy.allow` | ✅ `--allowed-tools` | ⚠️ `--allowed-tools` (deprecated) | ❌ |
-| `permissionPolicy.deny` | ✅ `--disallowed-tools` | ❌ | ❌ |
-| `extraEnv` | ✅ | ✅ | ✅ |
-| `unsetEnv` | ✅ | ✅ | ✅ |
-| `onRawLine` | ✅ | ✅ | ✅ |
+## Architecture stance
+
+The SDK remains subprocess-only for v1. That approach is sound for this
+project: `AdapterSpec` gives one real seam for argv/env/event translation,
+while shared code owns process lifecycle, prompt transport, custom-tool
+bridging, env hygiene, stall handling, and cleanup. Vendor SDKs, Copilot
+ACP, and Pi RPC can be future transports without forcing a rewrite of the
+public event schema.
+
+## Universal fields
+
+| Field | Claude | Codex | Copilot | Pi |
+|---|---|---|---|---|
+| `model` | ✅ `--model` | ✅ `--model` | ✅ `--model` | ✅ `--model` |
+| `reasoningEffort` | ✅ `--effort` (`low`..`max`) | ✅ `-c model_reasoning_effort` (`none`..`xhigh`) | ✅ `--effort` (`none`, `low`..`max`) | ✅ `--thinking` (`none`→`off`, `minimal`..`xhigh`) |
+| `workingDirectory` | ✅ process `cwd` | ✅ `-C` plus process `cwd` | ✅ `-C` plus process `cwd` | ✅ process `cwd` |
+| `addDirs` | ✅ `--add-dir` | ✅ `--add-dir` | ✅ `--add-dir` | ❌ |
+| `allowedTools` | ✅ `--allowed-tools` | ❌ | ✅ `--allow-tool` | ⚠️ `--tools` allowlist |
+| `tools` custom SDK bridge | ✅ `--mcp-config` | ✅ `-c mcp_servers.*` | ✅ `--additional-mcp-config @tempfile` | ❌ |
+| `permissionPolicy.mode=plan` | ✅ `--permission-mode plan` | ✅ `--sandbox read-only` | ✅ `--mode plan` | ✅ `--tools read,grep,find,ls` |
+| `permissionPolicy.mode=bypass` | ✅ `--permission-mode bypassPermissions` | ✅ `--dangerously-bypass-approvals-and-sandbox` | ✅ `--allow-all` | ⚠️ no extra flag |
+| `permissionPolicy.allow` | ✅ `--allowed-tools` | ❌ | ✅ `--allow-tool` | ⚠️ `--tools` |
+| `permissionPolicy.deny` | ✅ `--disallowed-tools` | ❌ | ✅ `--deny-tool` | ✅ `--exclude-tools` |
+| `extraEnv` / `unsetEnv` | ✅ | ✅ | ✅ | ✅ |
+| `onRawLine` | ✅ | ✅ | ✅ | ✅ |
 
 `extraEnv` empty-string values are preserved as legitimate values; use
-`unsetEnv` to delete. `unsetEnv` runs *after* `extraEnv` is merged — typical
-use is stripping stale auth env vars to force OAuth/keychain fallback.
+`unsetEnv` to delete. `unsetEnv` runs after `extraEnv` is merged.
 
-Codex `permissionPolicy.mode`:
-
-| Mode | Maps to |
-|---|---|
-| `bypass` | `--dangerously-bypass-approvals-and-sandbox` |
-| `plan` | `--sandbox read-only` |
-| anything else | `--full-auto` |
-
-## Claude-only optional extras
-
-| Field | Maps to | Gemini | Codex |
-|---|---|---|---|
-| `permissionMode` | `--permission-mode` | ❌ | ❌ |
-| `settingSources` | `--setting-sources` | ❌ | ❌ |
-| `forkSession` | `--fork-session` | ❌ | ❌ |
-| `systemPrompt` | `--system-prompt` | ❌ | ❌ |
-| `appendSystemPrompt` | `--append-system-prompt` | ❌ | ❌ |
-| `agents` | `--agents <json>` | ❌ | ❌ |
-| `maxBudgetUsd` | `--max-budget-usd` | ❌ | ❌ |
-
-## Gemini-only optional extras
-
-| Field | Maps to | Claude | Codex |
-|---|---|---|---|
-| `yolo` | `-y` (normalized to `--approval-mode yolo`) | ❌ | ❌ |
-| `sandbox` | `-s` | ❌ | ❌ |
-| `approvalMode` | `--approval-mode` | ❌ | ❌ |
-| `policyFiles` | `--policy` | ❌ | ❌ |
-| `adminPolicyFiles` | `--admin-policy` | ❌ | ❌ |
-| `extensions` | `-e` | ❌ | ❌ |
-| `includeDirectories` | `--include-directories` | ❌ | ❌ |
-| `allowedMcpServerNames` | `--allowed-mcp-server-names` | ❌ | ❌ |
-
-## Codex-only optional extras
+## Claude extras
 
 | Field | Maps to |
 |---|---|
-| `codexReasoningEffort` | `-c model_reasoning_effort="<v>"` |
-| `codexSandbox` | `--sandbox <v>` (`read-only` / `workspace-write` / `danger-full-access`) |
+| `permissionMode` | `--permission-mode` (`manual` included) |
+| `settingSources` | `--setting-sources` |
+| `isolation: 'strict'` | fresh `CLAUDE_CONFIG_DIR` plus empty strict MCP config |
+| `forkSession` | `--fork-session` on resume |
+| `systemPrompt` | `--system-prompt` |
+| `appendSystemPrompt` | `--append-system-prompt` |
+| `agents` | `--agents <json>` |
+| `maxBudgetUsd` | `--max-budget-usd` |
+| `claudeBare` | `--bare` |
+| `claudeNoSessionPersistence` | `--no-session-persistence` |
+
+Claude rejects Codex, Copilot, and Pi-only fields with
+`FeatureNotSupportedError`.
+
+## Codex extras
+
+| Field | Maps to |
+|---|---|
+| `codexReasoningEffort` | `-c model_reasoning_effort="<v>"` (legacy alias; prefer `reasoningEffort`) |
+| `codexSandbox` | `--sandbox <v>` (`read-only`, `workspace-write`, `danger-full-access`) |
 | `codexNetworkAccess` | `-c sandbox_workspace_write.network_access=<bool>` |
 | `codexDisablePlugins` | `--disable plugins` |
 | `codexSearch` | `--search` |
@@ -72,72 +71,76 @@ Codex `permissionPolicy.mode`:
 | `codexIgnoreRules` | `--ignore-rules` |
 | `codexDangerouslyBypassApprovalsAndSandbox` | `--dangerously-bypass-approvals-and-sandbox` |
 
-All Codex-only fields throw `FeatureNotSupportedError` on Claude and Gemini.
+Codex defaults to explicit `--sandbox workspace-write`; deprecated
+`--full-auto` is not used. Resume maps to
+`codex exec resume <SESSION_ID> -` or `codex exec resume --last -`.
 
-## `RunOpts`
+## Copilot extras
 
-| Field | Claude | Gemini | Codex |
-|---|---|---|---|
-| `signal` (AbortSignal) | ✅ | ✅ | ✅ |
-| `outputSchema` | ✅ `--json-schema` | ⚠️ prompt injection | ✅ `--output-schema <tmpfile>` |
-| `strictSchema: true` | ✅ | ❌ | ✅ |
-| `streamPartialMessages` | ✅ `--include-partial-messages` (text deltas only; thinking deltas not surfaced) | ⚠️ ignored | ⚠️ ignored |
-| `maxTurns` | ✅ `--max-turns` | n/a | ✅ `-c model_turn_limit=<n>` |
+| Field | Maps to |
+|---|---|
+| `copilotMode` | `--mode interactive|plan|autopilot` |
+| `copilotAgent` | `--agent` |
+| `copilotAllowUrls` | `--allow-url` |
+| `copilotDenyUrls` | `--deny-url` |
+| `copilotAvailableTools` | `--available-tools` |
+| `copilotExcludedTools` | `--excluded-tools` |
+| `copilotAdditionalMcpConfig` | `--additional-mcp-config` |
 
-With `streamPartialMessages` on Claude, each `content_block_delta` text delta
-is emitted as `{type:'message', role:'assistant', delta:true, text}`; the
-final aggregated message is still emitted with `delta:false`.
+Copilot headless mode uses
+`copilot -p <prompt> --output-format json --no-ask-user`.
+
+## Pi extras
+
+| Field | Maps to |
+|---|---|
+| `piProvider` | `--provider` |
+| `piModels` | `--models` comma list |
+| `piNoSession` | `--no-session` |
+| `piSessionDir` | `--session-dir` |
+| `piNoContextFiles` | `--no-context-files` |
+| `piNoExtensions` | `--no-extensions` |
+| `piNoSkills` | `--no-skills` |
+| `piNoPromptTemplates` | `--no-prompt-templates` |
+
+Pi headless mode uses `pi --mode json --print` with prompt over stdin. The
+adapter sets `PI_OFFLINE=1` by default so startup network checks do not
+surprise headless runs; callers can override by passing `extraEnv.PI_OFFLINE`.
+
+## Run options
+
+| Field | Claude | Codex | Copilot | Pi |
+|---|---|---|---|---|
+| `signal` | ✅ | ✅ | ✅ | ✅ |
+| `outputSchema` | ✅ `--json-schema` | ✅ `--output-schema <tmpfile>` | ⚠️ prompt injection | ⚠️ prompt injection |
+| `strictSchema: true` | ✅ | ✅ | ❌ | ❌ |
+| `streamPartialMessages` | ✅ `--include-partial-messages` | ⚠️ ignored | ⚠️ JSONL-dependent | ⚠️ `message_update` deltas |
+| `maxTurns` | ✅ `--max-turns` | ✅ `-c model_turn_limit=<n>` | ❌ | ❌ |
 
 ## Known gaps
 
-- **Live permission callbacks** — interactive `onPermissionRequest` is
-  deferred; no CLI exposes the hook at the binary layer. `permissionPolicy`
-  is the static surrogate.
-- **Fork** is Claude-only (`--fork-session`); Gemini and Codex's `fork()`
-  throw `FeatureNotSupportedError`.
-- **Codex MCP bridge** for custom `tools` is not yet wired.
-- **Long-lived bidirectional mode** (Claude `--input-format stream-json`,
-  Gemini `--acp`) is a future extension.
-
-## CLI version notes (doc drift vs. installed binary)
-
-Cases where the SDK targets the binary's actual surface rather than the
-public docs.
-
-- **Gemini `--output-format stream-json`** is supported on `gemini ≥ 0.38.x`
-  even though the public `docs/cli/headless.html` only lists `text` and
-  `json`. The unified event stream depends on it.
-- **Gemini `--yolo` cannot be combined with `--approval-mode`.** The SDK
-  normalizes `yolo: true` into `--approval-mode yolo`. A real conflict
-  (e.g. `yolo: true` plus `approvalMode: 'auto_edit'`) raises
-  `FeatureNotSupportedError` at the SDK boundary.
-- **Gemini MCP bridge is registered with `trust: true`** — without it, custom
-  tool calls would stall on confirmation in headless mode.
-- **Gemini `GEMINI_CLI_HOME`** is not in the public env-var list but is
-  honored by the binary's `homedir()` lookup. `assertBridgeRegistered` in
-  `src/adapters/gemini/home.ts` raises `GeminiBridgeNotLoadedError` if a
-  future Gemini release ever fails to register the bridge.
-- **Claude `--allowed-tools` / `--disallowed-tools`** — both kebab and camel
-  forms are accepted aliases; the SDK uses kebab.
-- **Codex `exec --json`** emits an evolving JSONL schema. The translator is
-  tolerant of adjacent event names (`agent_message` / `message`,
-  `tool_call` / `tool_use` / `exec_command_begin`, `done` / `turn_completed`
-  / `completed`); see `src/adapters/codex/translate.ts`.
+- Live permission callbacks remain out of scope; CLIs expose static policy
+  flags, not a portable callback hook at the binary layer.
+- `fork()` is implemented only for Claude. Copilot has no fork operation;
+  Pi has `--fork`, but the SDK has not mapped it safely yet.
+- Pi custom SDK `tools` throw `FeatureNotSupportedError` until a documented
+  MCP/SDK bridge exists for its headless transport.
+- Long-lived bidirectional transports are future work.
 
 ## Event translation reference
 
-See `src/adapters/{claude,gemini,codex}/translate.ts`. Shared shape:
+See `src/adapters/{claude,codex,copilot,pi}/translate.ts`. Shared shape:
 `CoderStreamEvent<P>` with `provider`, type-discriminated top-level fields,
 provider-narrowed `extra`, and raw `originalItem`.
 
-| Unified event | Claude source | Gemini source | Codex source |
-|---|---|---|---|
-| `init` | `system/init` | `init` | `session_configured` / `init` / `started` |
-| `message` | `assistant.message.content[type:text\|thinking]` | `message` | `agent_message` / `message` (or payload `type:message`) |
-| `tool_use` | `assistant.message.content[type:tool_use]` | `tool_use` | `tool_call` / `tool_use` / `exec_command_begin` / payload `type:function_call` |
-| `tool_result` | `user.message.content[type:tool_result]` | `tool_result` | `tool_result` / `exec_command_end` / payload `type:function_call_output` |
-| `progress` | `system/hook_*` | (unused) | (unused) |
-| `usage` | `result.usage` | `result.stats` | `usage` event or `usage` field on `done` |
-| `error` | `result` with `is_error:true` | `result` with `status:error` | `error` (classified via `classifyCodexError`) |
-| `done` | `result` (final) | `result` (final) | `done` / `turn_completed` / `completed` (`turn_aborted` → `cancelled`) |
-| `stderr` | every CLI stderr line, surfaced live before `done`; same buffer attached to `CliExitError.message` on non-zero exit | same | same |
+| Unified event | Claude source | Codex source | Copilot source | Pi source |
+|---|---|---|---|---|
+| `init` | `system/init` | `thread.started` / `session_configured` | `session` / `init` | `session` |
+| `message` | assistant text / partial deltas | `item.completed` agent message / older message events | assistant message / terminal result text | `message_update` / `message_end` |
+| `tool_use` | assistant `tool_use` | `item.started` tool events / older tool events | tool execution start | `tool_execution_start` |
+| `tool_result` | user `tool_result` | `item.completed` tool events / older tool results | tool execution end | `tool_execution_end` |
+| `progress` | hooks / unknown system subtypes | turn/item/reasoning progress | unknown JSONL records | turn/tool progress |
+| `usage` | result usage | `usage` or terminal usage | usage records or terminal usage | `turn_end` usage |
+| `error` | error result | `error` / `turn.failed` | `error` | `error` |
+| `done` | result | `turn.completed` / `done` | `done` / `result` | `agent_end` |
+| `stderr` | every CLI stderr line, surfaced live before non-zero `CliExitError` | same | same | same |

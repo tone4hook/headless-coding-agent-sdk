@@ -4,7 +4,7 @@
  * The SDK spawns a CLI subprocess that speaks MCP as a client. For
  * custom tools and mid-turn callbacks, we host an MCP server in-process
  * and point the CLI at it via `--mcp-config` (Claude) or `mcpServers` in
- * an ephemeral `GEMINI_CLI_HOME/.gemini/settings.json` (Gemini).
+ * provider-specific native MCP configuration.
  *
  * Transport: StreamableHTTP on 127.0.0.1:<random-port>. Each HTTP
  * request gets a fresh Server + Transport pair (stateless per-request

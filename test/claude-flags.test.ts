@@ -14,28 +14,38 @@ describe('buildClaudeArgv', () => {
     expect(argv).not.toContain('hi');
   });
 
-  it('maps model / allowedTools / system prompts / budget', () => {
+  it('maps model / reasoning / allowedTools / system prompts / budget', () => {
     const argv = buildClaudeArgv({
       prompt: 'hi',
       opts: {
         model: 'sonnet',
+        reasoningEffort: 'xhigh',
         allowedTools: ['Bash', 'Edit'],
         systemPrompt: 'you are X',
         appendSystemPrompt: 'also Y',
         maxBudgetUsd: 2.5,
+        permissionMode: 'manual',
+        claudeBare: true,
+        claudeNoSessionPersistence: true,
       },
     });
     expect(argv).toContain('--model');
     expect(argv).toContain('sonnet');
+    expect(argv).toContain('--effort');
+    expect(argv).toContain('xhigh');
     expect(argv).toContain('--allowed-tools');
     expect(argv).toContain('Bash');
     expect(argv).toContain('Edit');
+    expect(argv).toContain('--permission-mode');
+    expect(argv).toContain('manual');
     expect(argv).toContain('--system-prompt');
     expect(argv).toContain('you are X');
     expect(argv).toContain('--append-system-prompt');
     expect(argv).toContain('also Y');
     expect(argv).toContain('--max-budget-usd');
     expect(argv).toContain('2.5');
+    expect(argv).toContain('--bare');
+    expect(argv).toContain('--no-session-persistence');
   });
 
   it('maps outputSchema to --json-schema <JSON string>', () => {
@@ -101,21 +111,25 @@ describe('buildClaudeArgv', () => {
     expect(argv).toContain('Edit');
   });
 
-  it('throws FeatureNotSupportedError for Gemini-only fields', () => {
+  it('throws FeatureNotSupportedError for other-adapter fields', () => {
     for (const field of [
-      'yolo',
-      'sandbox',
-      'approvalMode',
-      'policyFiles',
-      'adminPolicyFiles',
-      'extensions',
-      'includeDirectories',
-      'allowedMcpServerNames',
+      'codexSandbox',
+      'copilotMode',
+      'piProvider',
     ] as const) {
       expect(() =>
         buildClaudeArgv({ prompt: 'hi', opts: { [field]: 'x' as never } }),
       ).toThrowError(FeatureNotSupportedError);
     }
+  });
+
+  it('rejects reasoning efforts not accepted by claude --effort', () => {
+    expect(() =>
+      buildClaudeArgv({ prompt: 'hi', opts: { reasoningEffort: 'minimal' } }),
+    ).toThrowError(FeatureNotSupportedError);
+    expect(() =>
+      buildClaudeArgv({ prompt: 'hi', opts: { reasoningEffort: 'none' } }),
+    ).toThrowError(FeatureNotSupportedError);
   });
 
   it('maps streamPartialMessages to --include-partial-messages', () => {
